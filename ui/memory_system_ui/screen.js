@@ -10,15 +10,16 @@ const timelineTab = require("./tabs/timeline");
 const knowledgeTab = require("./tabs/knowledge");
 const contactsTab = require("./tabs/contacts");
 const messagesTab = require("./tabs/messages"); // 预留：消息Tab
+const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
 const TAB_REGISTRY = [
   { id: 0, icon: 'dashboard',     label: '概览',   color: '#4CAF50' },
-  { id: 1, icon: 'checklist',     label: '待办',   color: '#FF5722' },
-  { id: 2, icon: 'timeline',      label: '时间线', color: '#2196F3' },
-  { id: 3, icon: 'menu_book',     label: '知识',   color: '#FF9800' },
-  { id: 4, icon: 'people',        label: '联系人', color: '#7B1FA2' },
-  { id: 5, icon: 'chat',          label: '消息',  color: '#00BCD4' }, // 预留
+  { id: 1, icon: 'timeline',      label: '时间线', color: '#2196F3' },
+  { id: 2, icon: 'menu_book',     label: '知识',   color: '#FF9800' },
+  { id: 3, icon: 'person',        label: '角色',   color: '#5E35B1' },
+  { id: 4, icon: 'search',        label: '搜索',   color: '#00897B' },
+  { id: 5, icon: 'settings',      label: '设置',   color: '#607D8B' },
 ];
 
 function Screen(ctx) {
@@ -42,6 +43,7 @@ function Screen(ctx) {
 
   var tabState = ctx.useState('tab', (uiBoot.tab !== undefined ? uiBoot.tab : 0));
   var dataState = ctx.useState('allData', cachedData);
+  var dataLoadedState = ctx.useState('allDataLoaded', false);
   var analyzingState = ctx.useState('analyzing', false);
   var resultState = ctx.useState('resultText', '');
   var showCfgState = ctx.useState('showCfg', false);
@@ -51,7 +53,13 @@ function Screen(ctx) {
   var filterTypeState = ctx.useState('filterType', (uiBoot.filterType !== undefined ? uiBoot.filterType : ''));
   var showCalState = ctx.useState('showCal', false);
   var memoryState = ctx.useState('memories', []);
+  var memoryLoadedState = ctx.useState('memoriesLoaded', false);
   var memoryQueryState = ctx.useState('memQuery', (uiBoot.memQuery !== undefined ? uiBoot.memQuery : ''));
+  var injectionState = ctx.useState('injectionSettings', null);
+  var injectionSavingState = ctx.useState('injectionSaving', false);
+  var injectionLimitInputState = ctx.useState('injectionLimitInput', '');
+  var screenPersonaState = ctx.useState('screenPersona', null);
+  var screenCharMemoriesState = ctx.useState('screenCharMemories', []);
 var uiSaveRef = ctx.useRef('uiSaveRef', '');
   var memoryLoadingState = ctx.useState('memLoading', false);
   var pendingDeleteState = ctx.useState('pendingDelete', '');
@@ -81,9 +89,12 @@ var totalChatsState = ctx.useState('msgs_totalChats', (uiBoot.totalChats !== und
   var apiKey = cfgKey[0], setApiKey = cfgKey[1];
   var model = cfgModel[0], setModel = cfgModel[1];
 var initRef = ctx.useRef('init', false);
+var triggerPollRef = ctx.useRef('triggerPoll', 0);
+var dataLoadScheduledRef = ctx.useRef('dataLoadScheduled', false);
+var memoryLoadScheduledRef = ctx.useRef('memoryLoadScheduled', false);
+var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
   if (!initRef.current) {
  initRef.current = true;
- loadData();
  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
  (async function() {
    try {
@@ -92,7 +103,6 @@ var initRef = ctx.useRef('init', false);
      if (r && r.started) {
        // 异步分析已启动 → 显示"分析中"并轮询刷新数据
        resultState[1]('🔄 检测到 ' + (r.newMessageCount || 0) + ' 条新对话，正在后台分析...');
-       var triggerPollRef = ctx.useRef('triggerPoll', 0);
        triggerPollRef.current += 1;
        var pollId = triggerPollRef.current;
        var startMs = Date.now();
@@ -142,23 +152,38 @@ var initRef = ctx.useRef('init', false);
    } catch(e) {}
  })();
 }
+
+  // 首次状态为空时读取一次；后续由根节点 onLoad、分析完成或用户操作明确刷新。
+  // 用 state（dataLoadedState）作唯一权威：只要数据未加载就重新调度，避免 useRef 在
+  // 快速切换实例复用时残留 true 导致加载永久跳过。
+  if (!dataLoadedState[0] && !dataLoadScheduledRef.current) {
+    dataLoadScheduledRef.current = true;
+    setTimeout(function() {
+      loadData().then(function() { dataLoadedState[1](true); })
+        .finally(function() { dataLoadScheduledRef.current = false; });
+    }, 0);
+  }
   // ===== 初始化时加载记忆 =====
   var currentTab = tabState[0];
-  if (currentTab === 3 && memoryState[0].length === 0 && !memoryLoadingState[0]) {
-    memoryLoadingState[1](true);
-    (async function() {
-      try {
-        var raw = await ctx.callTool('memory_system:load_memories', { limit: 100 });
-        var r = parseResult(raw);
-        if (r && r.success) { memoryState[1](r.memories || []); }
-      } catch(e) {}
-      memoryLoadingState[1](false);
-    })();
+  if ((currentTab === 2 || currentTab === 4) && !memoryLoadedState[0] && !memoryLoadingState[0] && !memoryLoadScheduledRef.current) {
+    memoryLoadScheduledRef.current = true;
+    setTimeout(function() {
+      loadKnowledgeMemories().finally(function() { memoryLoadScheduledRef.current = false; });
+    }, 0);
+  }
+
+  // ===== 角色页：进入时自动加载角色上下文与记忆（与知识页同款 setTimeout 模式）=====
+  // 每次进入角色 tab 都重新加载，不因之前加载过而跳过；ref 仅防同帧重复。
+  if (currentTab === 3 && !characterLoadScheduledRef.current) {
+    characterLoadScheduledRef.current = true;
+    setTimeout(function() {
+      loadScreenPersona().finally(function() { characterLoadScheduledRef.current = false; });
+    }, 0);
   }
 
   // ===== 初始化时加载已分析对话列表（用于消息Tab标记）=====
   var analyzedChatsInitRef = ctx.useRef('analyzedChatsInit', false);
-  if (currentTab === 5 && !analyzedChatsInitRef.current) {
+  if (currentTab === 99 && !analyzedChatsInitRef.current) {
     analyzedChatsInitRef.current = true;
     (async function() {
       try {
@@ -188,7 +213,7 @@ var isFreshEnter = (lastMsgsLoadAt === 0) || ((nowMs - lastMsgsLoadAt) > 3000);
 var msgsChatsEnterRef = ctx.useRef('msgsChatsEnter', false);
 // 如果 env 判断是新进入，重置 ref
 if (isFreshEnter) msgsChatsEnterRef.current = false;
-if (currentTab === 5 && !msgsChatsEnterRef.current) {
+if (currentTab === 99 && !msgsChatsEnterRef.current) {
 msgsChatsEnterRef.current = true;
 // 标记本次刷新时间，避免 3 秒内重复触发
 try { ctx.setEnv('MEMORY_SYSTEM_LAST_MSGS_LOAD', String(Date.now())); } catch(__e2) {}
@@ -242,6 +267,10 @@ loadingChatsState[1](false);
                 todos: r.extracted && r.extracted.todos || [],
                 menstrual: r.extracted && r.extracted.menstrual || []
             });
+            if (r.injection) {
+              injectionState[1](r.injection);
+              if (r.injection.maxMemories) injectionLimitInputState[1](String(r.injection.maxMemories));
+            }
             if (r.uiState && r.uiState.data) {
                 var saved = r.uiState.data;
                 if (saved.tab !== undefined) tabState[1](saved.tab);
@@ -264,11 +293,125 @@ loadingChatsState[1](false);
     } catch (e) {}
   }
 
+  async function loadScreenPersona() {
+    // 每次进入都重新加载角色上下文与记忆；不因之前加载过而跳过，
+    // 避免快速切换实例复用时持久 ref/state 残留导致角色页显示异常。
+    try {
+      var pRaw = await ctx.callTool('memory_system:get_persona_context', {});
+      var pResult = parseResult(pRaw);
+      var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : { id: '', name: '', type: '' };
+      ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID', String(p.id || ''));
+      ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME', String(p.name || ''));
+      ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE', String(p.type || ''));
+      screenPersonaState[1]({ id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') });
+      if (p.id) {
+        try {
+          var mRaw = await ctx.callTool('memory_system:load_memories', {
+            query: '*',
+            limit: 100,
+            scope: 'persona',
+            caller_card_id: String(p.id)
+          });
+          var mResult = parseResult(mRaw);
+          if (mResult && mResult.success && mResult.memories) {
+            screenCharMemoriesState[1](mResult.memories);
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  async function loadKnowledgeMemories() {
+    memoryLoadingState[1](true);
+    try {
+      var personaRaw = await ctx.callTool('memory_system:get_persona_context', {});
+      var personaResult = parseResult(personaRaw);
+      var personaId = personaResult && personaResult.success && personaResult.persona ? String(personaResult.persona.id || '') : '';
+      var raw = await ctx.callTool('memory_system:load_memories', {
+        limit: 100,
+        scope: personaId ? 'all' : 'global',
+        caller_card_id: personaId || undefined
+      });
+      var result = parseResult(raw);
+      if (result && result.success) memoryState[1](result.memories || []);
+      else resultState[1]('记忆读取失败：' + ((result && result.message) || '未知错误'));
+    } catch(e) {
+      resultState[1]('记忆读取失败：' + (e.message || String(e)));
+    }
+    memoryLoadedState[1](true);
+    memoryLoadingState[1](false);
+  }
+
   async function saveConfig() {
     await ctx.setEnv('MEMORY_SYSTEM_ENDPOINT', endpoint);
     await ctx.setEnv('MEMORY_SYSTEM_KEY', apiKey);
     await ctx.setEnv('MEMORY_SYSTEM_MODEL', model);
     resultState[1]('✅ 配置已保存');
+  }
+
+  async function saveInjectionSettings(patch) {
+    if (injectionSavingState[0]) return;
+    var current = injectionState[0] || { enabled: false, persist: true, maxMemories: 5 };
+    var next = {
+      enabled: patch.enabled !== undefined ? patch.enabled : current.enabled,
+      persist: patch.persist !== undefined ? patch.persist : current.persist,
+      maxMemories: current.maxMemories
+    };
+    injectionSavingState[1](true);
+    injectionState[1](next);
+    try {
+      var raw = await ctx.callTool('memory_system:set_injection_settings', next);
+      var r = parseResult(raw);
+      if (r && r.success && r.injection) {
+        injectionState[1](r.injection);
+        resultState[1]('✅ 记忆注入设置已保存');
+      } else {
+        injectionState[1](current);
+        resultState[1]('❌ ' + ((r && r.message) || '注入设置保存失败'));
+      }
+    } catch (e) {
+      injectionState[1](current);
+      resultState[1]('❌ ' + (e.message || String(e)));
+    }
+    injectionSavingState[1](false);
+  }
+
+  var injectionLimitTimerRef = ctx.useRef('injectionLimitTimer', null);
+
+  function onInjectionLimitChange(value) {
+    // 只接受纯数字，限制 2 位，避免中间态
+    var digits = String(value || '').replace(/\D/g, '').slice(0, 2);
+    injectionLimitInputState[1](digits);
+    if (injectionLimitTimerRef.current) {
+      try { clearTimeout(injectionLimitTimerRef.current); } catch (e) {}
+    }
+    injectionLimitTimerRef.current = setTimeout(function() {
+      injectionLimitTimerRef.current = null;
+      saveInjectionLimitWith(digits);
+    }, 600);
+  }
+
+  async function saveInjectionLimitWith(rawValue) {
+    var limit = parseInt(rawValue, 10);
+    if (!Number.isFinite(limit) || limit < 1 || limit > 20) {
+      resultState[1]('❌ 注入记忆条数必须是 1-20 的整数');
+      return;
+    }
+    injectionSavingState[1](true);
+    try {
+      var raw = await ctx.callTool('memory_system:set_injection_settings', { max_memories: limit });
+      var r = parseResult(raw);
+      if (r && r.success && r.injection) {
+        injectionState[1](r.injection);
+        injectionLimitInputState[1](String(r.injection.maxMemories));
+        resultState[1]('✅ 注入记忆条数已保存');
+      } else {
+        resultState[1]('❌ ' + ((r && r.message) || '注入记忆条数保存失败'));
+      }
+    } catch (e) {
+      resultState[1]('❌ ' + (e.message || String(e)));
+    }
+    injectionSavingState[1](false);
   }
 
   async function doAnalyze() {
@@ -305,7 +448,7 @@ loadingChatsState[1](false);
   var allData = dataState[0];
   var analyzing = analyzingState[0];
   var resultText = resultState[0];
-  var showCfg = showCfgState[0];
+  var showCfg = currentTab === 5;
   var q = queryState[0] || '';
   var dateStart = dateStartState[0] || '';
   var dateEnd = dateEndState[0] || '';
@@ -437,14 +580,6 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
           UI.Text({ text: (allData.todos || []).length + ' 待办 · ' + pendingTodoCount + ' 待完成 · ' + (allData.events || []).length + ' 事件', style: 'labelSmall', color: '#888888' }),
         ]),
         UI.Row({ verticalAlignment: 'center' }, [
-          UI.Surface({ shape: { cornerRadius: 12 }, containerColor: '#E8F5E9', padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() { showCfgState[1](!showCfg); } }, [
-            UI.Row({ verticalAlignment: 'center' }, [
-              UI.Icon({ name: 'settings', tint: showCfg ? '#4CAF50' : '#999999', size: 16 }),
-              UI.Spacer({ width: 4 }),
-              UI.Text({ text: 'API', style: 'labelSmall', color: showCfg ? '#4CAF50' : '#999999' }),
-            ]),
-          ]),
-          UI.Spacer({ width: 6 }),
           UI.Surface({ shape: { cornerRadius: 12 }, containerColor: analyzing ? '#FFF3E0' : '#4CAF50', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { if (!analyzing) doAnalyze(); } }, [
             UI.Text({ text: analyzing ? '⏳ 分析中' : '🤖 分析', style: 'labelSmall', color: analyzing ? '#FF9800' : '#FFFFFF', fontWeight: 'bold' }),
           ]),
@@ -515,20 +650,11 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   }
 
   if (currentTab === 1) {
-    makeFilterChip('待完成', 'pending', '#FF5722');
-    makeFilterChip('已完成', 'completed', '#4CAF50');
-  } else if (currentTab === 2) {
     makeFilterChip('活动', 'activity', '#2196F3');
     makeFilterChip('日程', 'schedule', '#FF9800');
     makeFilterChip('支出', 'expense', '#F44336');
     makeFilterChip('收入', 'income', '#4CAF50');
     makeFilterChip('经期', 'menstrual', '#E91E63');
-  } else if (currentTab === 4) {
-    makeFilterChip('家人', 'family', '#E91E63');
-    makeFilterChip('同事', 'colleague', '#2196F3');
-    makeFilterChip('朋友', 'friend', '#4CAF50');
-    makeFilterChip('同学', 'classmate', '#FF9800');
-    makeFilterChip('服务', 'service', '#00BCD4');
   }
 
   var filterRow = typeFilters.length > 0 ? [
@@ -541,10 +667,15 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   for (var ti = 0; ti < TAB_REGISTRY.length; ti++) {
     (function(t) {
       var isSel = currentTab === t.id;
-      tabItems.push(UI.Surface({ weight: 1, shape: { cornerRadius: 8 }, containerColor: isSel ? t.color : 'transparent', onClick: function() { tabState[1](t.id); filterTypeState[1](''); } }, [
-        UI.Column({ horizontalAlignment: 'center', padding: { top: 4, bottom: 4 } }, [
-          UI.Icon({ name: t.icon, tint: isSel ? '#FFFFFF' : '#999999', size: 20 }),
-          UI.Text({ text: t.label, style: 'labelSmall', color: isSel ? '#FFFFFF' : '#999999' }),
+      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? t.color : 'transparent', onClick: function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 2 || t.id === 4) memoryLoadedState[1](false); } }, [
+        UI.Column({ fillMaxWidth: true, fillMaxHeight: true, horizontalAlignment: 'center', verticalArrangement: 'center' }, [
+          UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
+            UI.Icon({ name: t.icon, tint: isSel ? '#FFFFFF' : '#8D8D96', size: 21 }),
+          ]),
+          UI.Spacer({ height: 2 }),
+          UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
+            UI.Text({ text: t.label, style: 'labelSmall', color: isSel ? '#FFFFFF' : '#777780', maxLines: 1 }),
+          ]),
         ]),
       ]));
     })(TAB_REGISTRY[ti]);
@@ -595,22 +726,60 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   var tabContent;
   switch (currentTab) {
     case 0: tabContent = overviewTab.render(ctx, allData); break;
-    case 1: tabContent = todosTab.render(ctx, allData, states, actions); break;
-    case 2: tabContent = timelineTab.render(ctx, allData, states, actions); break;
-    case 3: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
-    case 4: tabContent = contactsTab.render(ctx, allData, states); break;
-    case 5: tabContent = messagesTab.render(ctx, allData, states, actions); break;
+    case 1: tabContent = timelineTab.render(ctx, allData, states, actions); break;
+    case 2: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
+    case 3: tabContent = characterTab.render(ctx, screenPersonaState[0], screenCharMemoriesState[0]); break;
+    case 4:
+      var searchStates = Object.assign({}, states, { memQuery: q });
+      tabContent = knowledgeTab.render(ctx, allData, searchStates, actions, memoryState[0]);
+      break;
+    case 5: tabContent = [
+      UI.Text({ text: '设置', style: 'titleMedium', color: '#37474F', fontWeight: 'bold' }),
+      UI.Text({ text: '提取模型配置仅用于结构化分析；长期记忆使用 Operit 原生 Memory。', style: 'bodySmall', color: '#777777' }),
+      UI.Spacer({ height: 4 }),
+      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: '#EDE7F6', padding: 12, border: { width: 1, color: '#D1C4E9' } }, [
+        UI.Column({ spacing: 8 }, [
+          UI.Text({ text: '🧠 记忆注入', style: 'labelMedium', fontWeight: 'bold', color: '#4527A0' }),
+          UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
+            UI.Column({ weight: 1, spacing: 2 }, [
+              UI.Text({ text: '记忆注入', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
+              UI.Text({ text: '发送消息时附加相关记忆附件。', style: 'labelSmall', color: '#777777' }),
+            ]),
+            UI.Switch({ checked: !!(injectionState[0] && injectionState[0].enabled), onCheckedChange: function(v) { saveInjectionSettings({ enabled: v }); } }),
+          ]),
+          UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
+            UI.Column({ weight: 1, spacing: 2 }, [
+              UI.Text({ text: '注入内容随消息保存', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
+              UI.Text({ text: '开启：附件随用户消息一起落盘；关闭：仅发送给模型，不写入聊天记录。', style: 'labelSmall', color: '#777777' }),
+            ]),
+            UI.Switch({ checked: !!(injectionState[0] && injectionState[0].persist), onCheckedChange: function(v) { saveInjectionSettings({ persist: v }); } }),
+          ]),
+          UI.Column({ fillMaxWidth: true, spacing: 4 }, [
+            UI.Column({ spacing: 2 }, [
+              UI.Text({ text: '每次注入记忆条数', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
+              UI.Text({ text: '输入 1-20 自动保存（默认 5）。', style: 'labelSmall', color: '#777777' }),
+            ]),
+            UI.TextField({ value: injectionLimitInputState[0], onValueChange: onInjectionLimitChange, placeholder: (injectionState[0] && injectionState[0].maxMemories ? String(injectionState[0].maxMemories) : '5'), singleLine: true }),
+          ]),
+        ]),
+      ]),
+      UI.Spacer({ height: 8 }),
+    ].concat(cfgSection);
+      break;
     default: tabContent = overviewTab.render(ctx, allData);
   }
 
   // ===== 返回 =====
-  return UI.Column({ fillMaxSize: true, padding: 8 }, [
+  return UI.Column({ fillMaxSize: true, padding: 8, onLoad: async function() {
+    await loadData();
+    await loadScreenPersona();
+  } }, [
     headerCard,
     UI.Spacer({ height: 6 }),
-  ].concat(cfgSection).concat(currentTab === 0 ? [] : [searchBar]).concat([toolRow]).concat(calPanel).concat(filterRow).concat([
+  ].concat((currentTab === 1 || currentTab === 4) ? [searchBar] : []).concat(currentTab === 1 ? calPanel : []).concat(filterRow).concat([
     UI.LazyColumn({ fillMaxWidth: true, weight: 1, spacing: 4 }, tabContent),
-    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: 'surfaceVariant', padding: 4 }, [
-      UI.Row({ fillMaxWidth: true }, tabItems),
+    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 16 }, containerColor: '#F0EFF5', padding: 5 }, [
+      UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, tabItems),
     ]),
   ]));
 }

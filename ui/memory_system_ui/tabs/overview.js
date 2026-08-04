@@ -83,8 +83,8 @@ function render(ctx, allData) {
     ovEvtItems.push(UI.Spacer({ height: 4 }));
     ovEvtItems.push(UI.Text({ text: '暂无事件', style: 'bodySmall', color: '#999999' }));
   }
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#E3F2FD', padding: 14 }, [UI.Column({}, ovEvtItems)]));
-  items.push(UI.Spacer({ height: 8 }));
+  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: '#E3F2FD', padding: 16 }, [UI.Column({}, ovEvtItems)]));
+  items.push(UI.Spacer({ height: 10 }));
 
   // 财务概况
   var totalExpense = 0, totalIncome = 0;
@@ -93,32 +93,38 @@ function render(ctx, allData) {
     if (allFinance[fi2].type === 'income') totalIncome += amt2;
     else totalExpense += amt2;
   }
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#E0F7FA', padding: 14 }, [
-    UI.Row({ verticalAlignment: 'center' }, [
-      UI.Icon({ name: 'account_balance_wallet', tint: '#00838F', size: 28 }),
-      UI.Spacer({ width: 10 }),
-      UI.Column({}, [
-        UI.Text({ text: '财务概况', style: 'titleMedium', fontWeight: 'bold', color: '#00838F' }),
-        UI.Text({ text: allFinance.length + ' 笔记记录', style: 'bodySmall', color: '#666666' }),
+  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: '#E0F7FA', padding: 16 }, [
+    UI.Column({ fillMaxWidth: true }, [
+      UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
+        UI.Surface({ width: 40, height: 40, shape: { cornerRadius: 12 }, containerColor: '#B2EBF2' }, [
+          UI.Row({ fillMaxWidth: true, fillMaxHeight: true, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
+            UI.Icon({ name: 'account_balance_wallet', tint: '#00796B', size: 24 }),
+          ]),
+        ]),
+        UI.Spacer({ width: 12 }),
+        UI.Column({ weight: 1 }, [
+          UI.Text({ text: '财务概况', style: 'titleMedium', fontWeight: 'bold', color: '#00695C' }),
+          UI.Text({ text: allFinance.length + ' 笔收支记录', style: 'bodySmall', color: '#607D8B' }),
+        ]),
       ]),
-    ]),
-    UI.Spacer({ height: 8 }),
-    UI.Row({ fillMaxWidth: true, horizontalArrangement: 'spaceEvenly' }, [
-      UI.Column({ horizontalAlignment: 'center' }, [
-        UI.Text({ text: '¥' + totalExpense.toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: '#F44336' }),
-        UI.Text({ text: '支出', style: 'labelSmall', color: '#888888' }),
-      ]),
-      UI.Column({ horizontalAlignment: 'center' }, [
-        UI.Text({ text: '¥' + totalIncome.toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: '#4CAF50' }),
-        UI.Text({ text: '收入', style: 'labelSmall', color: '#888888' }),
-      ]),
-      UI.Column({ horizontalAlignment: 'center' }, [
-        UI.Text({ text: '¥' + (totalIncome - totalExpense).toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: (totalIncome - totalExpense) >= 0 ? '#4CAF50' : '#F44336' }),
-        UI.Text({ text: '净额', style: 'labelSmall', color: '#888888' }),
+      UI.Spacer({ height: 14 }),
+      UI.Row({ fillMaxWidth: true, horizontalArrangement: 'spaceBetween' }, [
+        UI.Column({ weight: 1, horizontalAlignment: 'center' }, [
+          UI.Text({ text: '¥' + totalExpense.toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: '#D84315' }),
+          UI.Text({ text: '支出', style: 'labelSmall', color: '#78909C' }),
+        ]),
+        UI.Column({ weight: 1, horizontalAlignment: 'center' }, [
+          UI.Text({ text: '¥' + totalIncome.toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: '#2E7D32' }),
+          UI.Text({ text: '收入', style: 'labelSmall', color: '#78909C' }),
+        ]),
+        UI.Column({ weight: 1, horizontalAlignment: 'center' }, [
+          UI.Text({ text: '¥' + (totalIncome - totalExpense).toFixed(0), style: 'titleMedium', fontWeight: 'bold', color: (totalIncome - totalExpense) >= 0 ? '#2E7D32' : '#D84315' }),
+          UI.Text({ text: '净额', style: 'labelSmall', color: '#78909C' }),
+        ]),
       ]),
     ]),
   ]));
-  items.push(UI.Spacer({ height: 8 }));
+  items.push(UI.Spacer({ height: 10 }));
 
   // 经期预测
   if (allMenstrual.length > 0) {

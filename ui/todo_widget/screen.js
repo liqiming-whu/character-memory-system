@@ -81,7 +81,7 @@ function Screen(ctx) {
   }
 
   items.push(UI.Spacer({ height: 4 }));
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#4CAF50', alpha: 0.1, padding: { left: 10, right: 10, top: 6, bottom: 6 }, onClick: function() { ctx.navigate('toolpkg:com.operit.memory_system:ui:memory_system_ui', {}); }, key: 'openFull' }, [
+  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#4CAF50', alpha: 0.1, padding: { left: 10, right: 10, top: 6, bottom: 6 }, onClick: function() { ctx.navigate('toolpkg:com.operit.character_memory_system:ui:memory_system_ui', {}); }, key: 'openFull' }, [
     UI.Row({ fillMaxWidth: true, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
       UI.Text({ text: '打开完整页面', style: 'labelSmall', color: '#4CAF50', fontWeight: 'bold' }),
     ]),

@@ -1,5 +1,7 @@
 # API 文档：`toolpkg.d.ts`
 
+> 权威来源：`D:\Operit\examples\types\toolpkg.d.ts`；说明性正文参考 `D:\Operit\docs\doc-src\package-dev\toolpkg.md`。当两者存在时间差时，以类型定义和 Operit 源码为准。
+
 `toolpkg.d.ts` 描述的是工具包插件注册系统。它的核心目标不是“调用工具”，而是**向宿主注册模块、钩子和插件**，让一个 tool package 可以在应用生命周期、消息处理、XML 渲染、输入菜单和提示词流水线中插入自己的行为。
 
 ## 作用
@@ -12,10 +14,13 @@
 - XML 渲染插件。
 - 输入菜单开关插件。
 - AI 聊天输入框监听和提交 Hook。
+- 聊天视图打开、更新和关闭 Hook。
 - 聊天消息持久化通知 Hook。
 - 工具执行生命周期钩子。
 - Prompt 输入、历史、系统提示词、工具提示词、最终发送前的各类钩子。
 - 摘要生成阶段的各类钩子。
+- ToolPkg 自定义 AI Provider 注册。
+- ToolPkg 运行时之间的 IPC 与 WASM 调用。
 
 ## 类型命名空间与运行时对象
 
@@ -39,6 +44,7 @@ ToolPkg.registerMessageProcessingPlugin(...)
 - `registerToolPkgXmlRenderPlugin(...)`
 - `registerToolPkgInputMenuTogglePlugin(...)`
 - `registerToolPkgChatInputHook(...)`
+- `registerToolPkgChatViewHook(...)`
 - `registerToolPkgChatMessageHook(...)`
 - `registerToolPkgToolLifecycleHook(...)`
 - `registerToolPkgPromptInputHook(...)`
@@ -49,6 +55,10 @@ ToolPkg.registerMessageProcessingPlugin(...)
 - `registerToolPkgPromptFinalizeHook(...)`
 - `registerToolPkgPromptEstimateFinalizeHook(...)`
 - `registerToolPkgSummaryGenerateHook(...)`
+- `registerToolPkgUiRoute(...)`
+- `registerToolPkgNavigationEntry(...)`
+- `registerToolPkgDesktopWidget(...)`
+- `registerToolPkgAiProvider(...)`
 
 ## 基础类型
 
@@ -125,6 +135,7 @@ interface PromptTurn {
 
 ### 工具生命周期事件：`ToolLifecycleEventName`
 
+- `tool_call_intercept`
 - `tool_call_requested`
 - `tool_permission_checked`
 - `tool_execution_started`
@@ -154,6 +165,7 @@ interface PromptTurn {
 
 - `before_compose_tool_prompt`
 - `filter_tool_prompt_items`
+- `filter_tool_call_tools`
 - `after_compose_tool_prompt`
 
 #### `PromptFinalizeEventName`
@@ -191,6 +203,7 @@ interface PromptTurn {
 
 字段包括：
 
+- `chatId?`
 - `messageContent?`
 - `chatHistory?: PromptTurn[]`
 - `workspacePath?`
@@ -212,6 +225,8 @@ interface PromptTurn {
 
 - `action?: 'create' | 'toggle' | string`
 - `toggleId?`
+- `chatId?`
+- `runtime?`
 
 ### `ChatInputEventPayload`
 
@@ -233,6 +248,16 @@ interface PromptTurn {
 - `input_changed`
 - `submit_requested`
 - `submitted`
+
+### `ChatViewEventPayload`
+
+聊天视图事件名包括：
+
+- `view_opened`
+- `view_updated`
+- `view_closed`
+
+载荷字段包括：`viewId?`、`chatId?`、`workspacePath?`、`workspaceEnv?`、`runtime?`、`title?`。Chat View Hook 是观察型 Hook，注册结构为 `{ id, function }`。
 
 ### `ChatMessageEventPayload`
 
@@ -287,6 +312,7 @@ interface PromptTurn {
 字段包括：
 
 - `stage?`
+- `chatId?`
 - `functionType?`
 - `promptFunctionType?`
 - `useEnglish?`
@@ -298,7 +324,7 @@ interface PromptTurn {
 - `toolPrompt?`
 - `modelParameters?`
 - `availableTools?`
-- `metadata?`
+- `metadata?`，类型为 `HookMetadata`，其中 `activePrompt?` 可描述当前激活的角色卡或角色组：`{ type: 'character_card' | 'character_group', id, name }`
 
 ### `SummaryGenerateEventPayload`
 
@@ -462,6 +488,13 @@ interface PromptTurn {
 - `id`
 - `function`
 
+### `ChatViewHookRegistration`
+
+字段：
+
+- `id`
+- `function`
+
 ### `ChatMessageHookRegistration`
 
 字段：
@@ -496,6 +529,7 @@ interface PromptTurn {
 - `registerXmlRenderPlugin(definition)`
 - `registerInputMenuTogglePlugin(definition)`
 - `registerChatInputHook(definition)`
+- `registerChatViewHook(definition)`
 - `registerChatMessageHook(definition)`
 - `registerToolLifecycleHook(definition)`
 - `registerPromptInputHook(definition)`
@@ -506,6 +540,10 @@ interface PromptTurn {
 - `registerPromptFinalizeHook(definition)`
 - `registerPromptEstimateFinalizeHook(definition)`
 - `registerSummaryGenerateHook(definition)`
+- `registerAiProvider(definition)`
+- `getConfigDir(pluginId?)`
+- `ipc`
+- `wasm`
 - `readResource(key, outputFileName?)`
 
 ### `ToolPkg.readResource(...)`
@@ -516,6 +554,8 @@ interface PromptTurn {
 const jarPath = await ToolPkg.readResource('apktool_lib_jar', 'apktool-lib.jar');
 ```
 
+完整签名为 `readResource(key, outputFileName?, internal?)`；`internal` 是权威类型定义提供的可选布尔参数。常规插件资源读取保持省略该参数即可。
+
 说明：
 
 - 这个方法不依赖 `compose_dsl` 的 `ctx`，普通子包工具函数、主入口 hook、UI 模块都可以直接调用。
@@ -523,6 +563,30 @@ const jarPath = await ToolPkg.readResource('apktool_lib_jar', 'apktool-lib.jar')
 - `outputFileName` 可选；不传时会使用清单资源原始文件名。
 - 如果资源 `mime` 是目录类型（例如 `inode/directory`、`vnd.android.document/directory`），运行时会先把该目录压成 zip，再返回这个 zip 文件的绝对路径；默认文件名会自动补 `.zip`。
 - `registerToolPkg()` 执行期间不可调用；调用会立即抛出异常。
+
+### 角色卡上下文
+
+Prompt Hook 的 `metadata.activePrompt` 是权威类型定义提供的当前激活提示词快照。`type` 可为 `character_card` 或 `character_group`，并提供稳定的 `id` 与显示用 `name`。角色系统应使用 `id` 做内部绑定，不应使用可变的显示名作为唯一标识。
+
+### ToolPkg AI Provider
+
+`registerAiProvider(definition)` 注册自定义模型提供方。定义包含：
+
+- `id`
+- `displayName?`
+- `description?`
+- `listModels.function`
+- `sendMessage.function`
+- `testConnection.function`
+- `calculateInputTokens.function`
+
+模型列表返回 `{ models: [{ id, name }] }`；发送消息返回 `{ text, usage? }`；连接测试返回 `{ success, message?, error? }`；输入 Token 计算返回 `{ tokens }`。
+
+### IPC、配置目录与 WASM
+
+- `getConfigDir(pluginId?)` 返回插件配置目录。
+- `ipc.on/off/call` 用于 `main`、`ui`、`sandbox`、`provider` 等 ToolPkg 运行时之间通信。
+- `wasm.call(moduleId, exportName, args?)` 调用清单声明的 WASM 模块。
 
 ## AssemblyScript WASM 模块
 

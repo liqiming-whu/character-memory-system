@@ -26,6 +26,32 @@ METADATA
             "parameters": []
         },
         {
+            "name": "get_persona_context",
+            "description": { "zh": "读取最近一次Prompt Hook识别到的角色卡上下文", "en": "Read the character context most recently identified by Prompt Hook" },
+            "parameters": []
+        },
+        {
+            "name": "reconcile_native_memory",
+            "description": { "zh": "将历史结构化生活数据幂等补齐到 Operit 原生 Memory", "en": "Idempotently reconcile historical structured life data into Operit native Memory" },
+            "parameters": [
+                { "name": "force", "type": "boolean", "required": false, "description": "忽略已完成标记并重新核对" }
+            ]
+        },
+        {
+            "name": "get_injection_settings",
+            "description": { "zh": "读取记忆注入设置（注入开关、注入内容是否随消息保存）", "en": "Read memory injection settings" },
+            "parameters": []
+        },
+        {
+            "name": "set_injection_settings",
+            "description": { "zh": "保存记忆注入设置（注入开关、注入内容是否随消息保存、注入记忆条数）", "en": "Save memory injection settings" },
+            "parameters": [
+                { "name": "enabled", "type": "boolean", "required": false, "description": "记忆注入总开关" },
+                { "name": "persist", "type": "boolean", "required": false, "description": "注入内容是否随消息保存" },
+                { "name": "max_memories", "type": "integer", "required": false, "description": "每次注入记忆条数上限，1-20" }
+            ]
+        },
+        {
             "name": "toggle_todo",
             "description": { "zh": "切换待办事项的完成状态", "en": "Toggle todo item completion status" },
             "parameters": [
@@ -62,7 +88,9 @@ METADATA
             "parameters": [
                 { "name": "title", "type": "string", "required": true, "description": "记忆标题" },
                 { "name": "content", "type": "string", "required": true, "description": "记忆内容" },
-                { "name": "tags", "type": "string", "required": false, "description": "标签，逗号分隔" }
+                { "name": "tags", "type": "string", "required": false, "description": "标签，逗号分隔" },
+                { "name": "source", "type": "string", "required": false, "description": "明确的记忆来源；不传时按是否有角色卡ID自动选择" },
+                { "name": "caller_card_id", "type": "string", "required": false, "description": "角色卡ID；传入时写入该角色绑定的Memory Profile" }
             ]
         },
         {
@@ -70,7 +98,9 @@ METADATA
 "description": { "zh": "从向量库查询记忆", "en": "Query memories from vector store" },
 "parameters": [
 { "name": "limit", "type": "integer", "required": false, "description": "最大返回数量，默认50" },
-{ "name": "query", "type": "string", "required": false, "description": "搜索查询，不传则返回全部" }
+{ "name": "query", "type": "string", "required": false, "description": "搜索查询，不传则返回全部" },
+{ "name": "scope", "type": "string", "required": false, "description": "查询范围：global、persona 或 all；默认按是否传角色卡ID选择" },
+{ "name": "caller_card_id", "type": "string", "required": false, "description": "角色卡ID；传入时查询该角色绑定的Memory Profile" }
 ]
 },
         {
@@ -78,7 +108,8 @@ METADATA
             "description": { "zh": "从向量库删除记忆", "en": "Delete a memory from vector store" },
             "parameters": [
                 { "name": "memory_id", "type": "string", "required": false, "description": "记忆ID或标题" },
-                { "name": "title", "type": "string", "required": false, "description": "记忆标题（可选，用于删除向量库记录" }
+                { "name": "title", "type": "string", "required": false, "description": "记忆标题（可选，用于删除向量库记录）" },
+                { "name": "caller_card_id", "type": "string", "required": false, "description": "角色卡ID；传入时从该角色绑定的Memory Profile删除" }
             ]
         },
         {
@@ -96,20 +127,35 @@ METADATA
     ]
 }
 */
-var DATA_DIR = '/sdcard/Download/Operit/memory_system_data';
+var DATA_DIR = '/sdcard/Download/Operit/character_memory_system_data';
 var EXTRACTED_FILE = DATA_DIR + '/extracted.json';
-var MEMORY_FILE = DATA_DIR + '/memories.json';
+var PERSONA_FILE = DATA_DIR + '/active_persona.json';
+var RECONCILE_FILE = DATA_DIR + '/reconcile_v1_4_0.json';
+var SETTINGS_FILE = DATA_DIR + '/settings.json';
+var GLOBAL_MEMORY_FOLDER = 'character_memory/global';
 var UI_STATE_FILE = DATA_DIR + '/last_ui_state.json';
 var UI_STATE_ENV = 'MEMORY_SYSTEM_UI_STATE_FILE';
-// ===== UI 触发的"分析触发器"状态文件 =====
-// 与 main.js 的 trigger.json 隔离，专门记录侧边栏自动分析的检测/水位线
-var TRIGGER_STATE_FILE = DATA_DIR + '/trigger_state.json';
+// Hook 与侧边栏共用按对话保存的分析水位线。
+var TRIGGER_STATE_FILE = DATA_DIR + '/trigger.json';
+var ENV_KEY_EVENTS = 'MW_DATA_EVENTS';
 var ENV_KEY_CONTACTS = 'MW_DATA_CONTACTS';
 var ENV_KEY_INFO = 'MW_DATA_INFO';
 var ENV_KEY_FINANCE = 'MW_DATA_FINANCE';
 var ENV_KEY_TODOS = 'MW_DATA_TODOS';
 var ENV_KEY_MENSTRUAL = 'MW_DATA_MENSTRUAL';
 var ENV_KEY_TIMESTAMP = 'MW_DATA_TIMESTAMP';
+var ENV_KEY_INJECTION = 'CMS_INJECTION_SETTINGS';
+
+function personaMemoryFolder(callerCardId) {
+    var safeId = String(callerCardId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    return safeId ? 'character_memory/personas/' + safeId : GLOBAL_MEMORY_FOLDER;
+}
+
+function analysisWatermark(state, chatId) {
+    if (state && state.watermarks && state.watermarks[chatId]) return state.watermarks[chatId];
+    if (state && state.chatId === chatId && state.lastProcessedTs) return state.lastProcessedTs;
+    return 0;
+}
 
 async function readJson(path, fallback) {
     try {
@@ -251,15 +297,111 @@ exports.save_ui_state = async function (params) {
     }
 };
 
-// ===== load_saved_data：只返回 extracted + memories =====
+// ===== load_saved_data：返回本地结构化数据；长期记忆由 load_memories 查询原生 Memory =====
 exports.load_saved_data = async function () {
     try {
         var ext = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
         if (!ext.todos) ext.todos = [];
         if (!ext.finance) ext.finance = [];
-        var memories = await readJson(MEMORY_FILE, []);
+        // 历史对账改为后台异步执行：首次对账可能遍历大量条目较慢，
+        // 不能阻塞 UI 首次数据加载；reconcileNativeMemory 内部用文件标记防重复。
+        (function () {
+            try {
+                reconcileNativeMemory(false).then(function (r) {
+                    try { console.log('memory_system background reconcile done', JSON.stringify(r)); } catch (_) {}
+                }).catch(function (e) {
+                    try { console.log('memory_system background reconcile failed', String(e)); } catch (_) {}
+                });
+            } catch (e) {}
+        })();
         var uiState = await readUiState();
-        complete({ success: true, extracted: ext, memories: memories, uiState: uiState });
+        var injectionSettings = await readInjectionSettings();
+        complete({ success: true, extracted: ext, uiState: uiState, injection: injectionSettings });
+    } catch (e) {
+        complete({ success: false, message: e.message || String(e) });
+    }
+};
+
+exports.reconcile_native_memory = async function (params) {
+    try {
+        var result = await reconcileNativeMemory(!!(params && params.force));
+        complete({ success: true, result: result });
+    } catch (e) {
+        complete({ success: false, message: e.message || String(e) });
+    }
+};
+
+exports.get_persona_context = async function () {
+    try {
+        var context = await readJson(PERSONA_FILE, { version: 1, type: '', id: '', name: '', chatId: '', updatedAt: '' });
+        complete({ success: true, persona: context });
+    } catch (e) {
+        complete({ success: false, message: e.message || String(e) });
+    }
+};
+
+// ===== 记忆注入设置（JSON 持久化，随数据目录一起可导出）=====
+var DEFAULT_INJECTION_SETTINGS = {
+    enabled: false,
+    persist: true,
+    maxMemories: 5
+};
+
+function sanitizeInjectionSettings(input) {
+    var raw = input && typeof input === 'object' ? input : {};
+    var limit = parseInt(raw.maxMemories, 10);
+    if (!Number.isFinite(limit)) limit = 5;
+    return {
+        enabled: raw.enabled === true,
+        persist: raw.persist !== false,
+        maxMemories: Math.max(1, Math.min(20, limit))
+    };
+}
+
+async function readInjectionSettings() {
+    var saved = await readJson(SETTINGS_FILE, null);
+    var inj = saved && saved.injection && typeof saved.injection === 'object' ? saved.injection : {};
+    return sanitizeInjectionSettings(inj);
+}
+
+async function writeInjectionSettings(settings) {
+    var next = sanitizeInjectionSettings(settings);
+    try { await Tools.Files.makeDirectory(DATA_DIR, true); } catch (e) {}
+    await writeJson(SETTINGS_FILE, { version: 1, updatedAt: new Date().toISOString(), injection: next });
+    return next;
+}
+
+exports.get_injection_settings = async function () {
+    try {
+        var settings = await readInjectionSettings();
+        if (typeof setEnv === 'function') {
+            try { setEnv(ENV_KEY_INJECTION, JSON.stringify(settings)); } catch (e) {}
+        }
+        complete({ success: true, injection: settings });
+    } catch (e) {
+        complete({ success: false, message: e.message || String(e) });
+    }
+};
+
+exports.set_injection_settings = async function (params) {
+    try {
+        // 部分更新：先读当前设置，只覆盖传入的字段，避免重置其它开关
+        var current = await readInjectionSettings();
+        var patch = {
+            enabled: current.enabled,
+            persist: current.persist,
+            maxMemories: current.maxMemories
+        };
+        if (params && params.enabled !== undefined) patch.enabled = !!params.enabled;
+        if (params && params.persist !== undefined) patch.persist = !!params.persist;
+        if (params && params.max_memories !== undefined && params.max_memories !== null && params.max_memories !== '') {
+            patch.maxMemories = parseInt(params.max_memories, 10);
+        }
+        var settings = await writeInjectionSettings(patch);
+        if (typeof setEnv === 'function') {
+            try { setEnv(ENV_KEY_INJECTION, JSON.stringify(settings)); } catch (e) {}
+        }
+        complete({ success: true, injection: settings });
     } catch (e) {
         complete({ success: false, message: e.message || String(e) });
     }
@@ -267,7 +409,7 @@ exports.load_saved_data = async function () {
 
 // ===== analyze_saved_messages：从数据库读取对话 → AI 提取结构化数据 =====
 // 分批分析消息
-async function analyzeMessagesBatch(messages, startIdx, batchSize, endpoint, apiKey, model, existingSummary) {
+async function analyzeMessagesBatch(messages, startIdx, batchSize, endpoint, apiKey, model, existingSummary, personaName) {
     var batch = messages.slice(startIdx, startIdx + batchSize);
     var text = batch.map(function (m) {
         var role = (m.sender === 'user' || m.sender === 'USER') ? '用户' : 'AI';
@@ -278,7 +420,12 @@ async function analyzeMessagesBatch(messages, startIdx, batchSize, endpoint, api
 
     if (!text || text.length < 10) return null;
 
-    var prompt = '你是一个记忆系统。请理解以下对话整体讲了什么，然后提取有价值的信息。\n\n核心原则：\n- 你是在理解一段对话后做总结，不是逐条扫描消息\n- 一段对话可能只产生0-2条有价值的提取，这是正常的\n- 过程噪音（反复调试、重复提问、工具调用细节）不要提取\n- 无效信息（"继续""好的""开始"等）完全忽略\n- 如果与已有数据语义重复，不要重复提取\n' + existingSummary + '\n返回纯JSON（不要markdown代码块，不要任何额外文字）：\n{"summary":"对话核心内容的精炼总结（保留有价值的信息、决策、结论。如果对话没有保留价值，留空字符串）","events":[{"type":"activity|schedule|observation|milestone|mood","title":"标题","description":"描述","importance":"high|medium|low","date":"YYYY-MM-DD","time":"HH:MM"}],"todos":[{"title":"待办事项","description":"描述","priority":"high|medium|low","dueDate":"YYYY-MM-DD或null","completed":false}],"contacts":[{"name":"姓名","relation":"friend|family|colleague|classmate|service|other","attributes":[{"key":"属性名","value":"值"}],"context":"提到这个人的场景"}],"info":[{"category":"类别","content":"内容"}],"finance":[{"type":"expense|income","category":"类别","amount":0,"description":"描述","date":"YYYY-MM-DD"}],"menstrual":[{"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD或null","symptoms":"症状描述"}]}\n\n提取规则：\n1. events：有记录价值的事件。activity=做了什么事；schedule=有时间安排的事；observation=发现的现象；milestone=阶段性变化；mood=情绪\n2. todos：用户明确要做的事（"记得""要去""得买"等），不是已经做完的事\n3. contacts：提到的人物及其属性（生日/手机/喜好等）\n4. info：值得记住的知识/事实/参数（路径、密码提示、知识点等）\n5. finance：涉及花钱或收钱的记录\n6. menstrual：用户提到的经期记录，包括开始和结束日期及伴随症状\n7. 某类没数据用空数组\n8. 同一件事不要拆成多条——"侧边栏一直转圈，反复调试"是1个事件不是6个\n\n对话内容：\n' + text;
+    var prompt = '你是一个记忆系统。请理解以下对话整体讲了什么，然后提取有价值的信息。\n\n核心原则：\n- 你是在理解一段对话后做总结，不是逐条扫描消息\n- 一段对话可能只产生0-2条有价值的提取，这是正常的\n- 过程噪音（反复调试、重复提问、工具调用细节）不要提取\n- 无效信息（"继续""好的""开始"等）完全忽略\n- 如果与已有数据语义重复，不要重复提取\n' + existingSummary + '\n返回纯JSON（不要markdown代码块，不要任何额外文字）：\n{"summary":"对话核心内容的精炼总结（保留有价值的信息、决策、结论。如果对话没有保留价值，留空字符串）","events":[{"type":"activity|schedule|observation|milestone|mood","title":"标题","description":"描述","importance":"high|medium|low","date":"YYYY-MM-DD","time":"HH:MM"}],"todos":[{"title":"待办事项","description":"描述","priority":"high|medium|low","dueDate":"YYYY-MM-DD或null","completed":false}],"contacts":[{"name":"姓名","relation":"friend|family|colleague|classmate|service|other","attributes":[{"key":"属性名","value":"值"}],"context":"提到这个人的场景"}],"info":[{"category":"类别","content":"内容"}],"finance":[{"type":"expense|income","category":"类别","amount":0,"description":"描述","date":"YYYY-MM-DD"}],"menstrual":[{"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD或null","symptoms":"症状描述"}],"character":[{"title":"标题","content":"角色身份或背景事实"}],"relationship":[{"title":"标题","content":"用户与角色的明确关系事实或共同经历"}],"preference":[{"title":"标题","content":"用户或角色明确表达的偏好"}],"interaction_rule":[{"title":"标题","content":"明确约定的称呼、回复风格或互动边界"}]}\n\n提取规则：\n1. events：有记录价值的事件。activity=做了什么事；schedule=有时间安排的事；observation=发现的现象；milestone=阶段性变化；mood=情绪\n2. todos：用户明确要做的事（"记得""要去""得买"等），不是已经做完的事\n3. contacts：提到的人物及其属性（生日/手机/喜好等）\n4. info：值得记住的知识/事实/参数（路径、密码提示、知识点等）\n5. finance：涉及花钱或收钱的记录\n6. menstrual：用户提到的经期记录，包括开始和结束日期及伴随症状\n7. character/relationship/preference/interaction_rule：仅在存在当前角色卡且事实明确时提取，否则返回空数组\n8. 某类没数据用空数组\n9. 同一件事不要拆成多条——"侧边栏一直转圈，反复调试"是1个事件不是6个\n\n对话内容：\n' + text;
+    prompt += '\n\n分类补充：用户明确表达的稳定习惯、作息和长期个人事实优先归入 info，category 使用“用户习惯”或准确的事实类别，不要只塞进 contacts.attributes。';
+
+    if (personaName) {
+        prompt += '\n\n当前角色卡：' + personaName + '。角色四类只提取对当前角色长期互动有价值且由对话明确支持的内容。';
+    }
 
     var response = await Tools.Net.http({
         url: endpoint,
@@ -326,11 +473,149 @@ async function analyzeMessagesBatch(messages, startIdx, batchSize, endpoint, api
     }
 }
 
+async function persistParsedToNativeMemory(parsed, callerCardId) {
+    var entries = serializeLifeEntries(parsed);
+    for (var i = 0; i < entries.length; i++) {
+        try {
+            await upsertLifeMemory(entries[i], 'character_memory_life_auto');
+        } catch (e) { try { console.log('memory_system life Memory.create failed', entries[i].title, String(e)); } catch (_) {} }
+    }
+    if (!callerCardId) return;
+    var roleCategories = ['character', 'relationship', 'preference', 'interaction_rule'];
+    for (var rci = 0; rci < roleCategories.length; rci++) {
+        var category = roleCategories[rci];
+        var roleItems = Array.isArray(parsed[category]) ? parsed[category] : [];
+        for (var rii = 0; rii < roleItems.length; rii++) {
+            var item = roleItems[rii] || {};
+            if (!item.title || !item.content) continue;
+            try {
+                await Tools.Memory.create({
+                    title: '[persona:' + callerCardId + '][' + category + '] ' + item.title,
+                    content: item.content,
+                    source: 'character_memory_role_auto',
+                    folderPath: personaMemoryFolder(callerCardId),
+                    tags: 'character_memory,' + category + ',auto,schema_v1',
+                    callerCardId: callerCardId
+                });
+            } catch (e) { try { console.log('memory_system persona Memory.create failed', category, item.title, String(e)); } catch (_) {} }
+        }
+    }
+}
+
+function contactContent(contact) {
+    var attrs = (contact.attributes || []).map(function(a) { return String(a.key || '') + ':' + String(a.value || ''); }).filter(Boolean).join('; ');
+    var contexts = contact.contexts ? contact.contexts.map(function(c) { return c.text; }).filter(Boolean).join('; ') : (contact.context || '');
+    return [attrs, contexts, contact.relation || ''].filter(Boolean).join('; ');
+}
+
+function normalizeIdentity(text) {
+    return String(text || '').toLowerCase().replace(/[\s\.,，。！？、：:；;（）()"'「」『』]/g, '');
+}
+
+function dedupeLifeEntries(list, type) {
+    if (!Array.isArray(list)) return [];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+        var item = list[i] || {};
+        var key = '';
+        if (type === 'events') key = normalizeIdentity(item.title) + '|' + (item.date || '');
+        else if (type === 'info') key = normalizeIdentity(item.category) + '|' + normalizeIdentity(item.content);
+        else if (type === 'finance') key = normalizeIdentity(item.type) + '|' + normalizeIdentity(item.description) + '|' + (item.date || '') + '|' + String(item.amount || '');
+        else key = JSON.stringify(item);
+        if (key && seen[key]) continue;
+        seen[key] = true;
+        out.push(item);
+    }
+    return out;
+}
+
+function serializeLifeEntries(data) {
+    data = data || {};
+    var entries = [];
+    (data.events || []).forEach(function(e) { if (e.title) entries.push({ title: '事件: ' + e.title, content: (e.description || '') + (e.date ? ' (' + e.date + ')' : ''), category: 'events', identity: normalizeIdentity(e.title) + '|' + (e.date || '') }); });
+    (data.info || []).forEach(function(i) { if (i.content) entries.push({ title: '信息: ' + (i.category || ''), content: i.content, category: 'info', identity: normalizeIdentity(i.category) + '|' + normalizeIdentity(i.content) }); });
+    (data.contacts || []).forEach(function(c) { if (c.name) entries.push({ title: '联系人: ' + c.name, content: contactContent(c), category: 'contacts', identity: normalizeIdentity(c.name) }); });
+    (data.finance || []).forEach(function(f) { if (f.description) entries.push({ title: (f.type === 'income' ? '收入: ' : '支出: ') + f.description, content: String(f.amount || '') + (f.date ? ' (' + f.date + ')' : ''), category: 'finance', identity: normalizeIdentity(f.type) + '|' + normalizeIdentity(f.description) + '|' + (f.date || '') }); });
+    (data.todos || []).forEach(function(t) { if (t.title) entries.push({ title: '待办: ' + t.title, content: (t.description || '') + (t.dueDate ? ' (截止 ' + t.dueDate + ')' : ''), category: 'todos', identity: normalizeIdentity(t.title) + '|' + (t.dueDate || '') }); });
+    (data.menstrual || []).forEach(function(m) { if (m.startDate) entries.push({ title: '经期: ' + m.startDate, content: '经期记录 ' + m.startDate + (m.endDate ? ' ~ ' + m.endDate : '') + (m.symptoms ? ' ' + m.symptoms : ''), category: 'menstrual', identity: m.startDate }); });
+    return entries;
+}
+
+function stableLifeTitle(entry) {
+    var text = entry.category + '\n' + entry.identity;
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return entry.title + ' [cms:' + (hash >>> 0).toString(36) + ']';
+}
+
+async function memoryByTitle(title) {
+    try {
+        var result = await Tools.Memory.getByTitle({ title: title });
+        return result && result.memories && result.memories.length ? result.memories[0] : null;
+    } catch (e) { return null; }
+}
+
+async function upsertLifeMemory(entry, source) {
+    var legacy = await memoryByTitle(entry.title);
+    if (legacy && String(legacy.content || '') === String(entry.content || '')) return 'skipped';
+    var stableTitle = stableLifeTitle(entry);
+    var existing = await memoryByTitle(stableTitle);
+    if (existing) {
+        if (String(existing.content || '') === String(entry.content || '')) return 'skipped';
+        await Tools.Memory.update({
+            oldTitle: stableTitle,
+            content: entry.content,
+            source: source,
+            folderPath: GLOBAL_MEMORY_FOLDER,
+            tags: 'life,' + entry.category + ',auto,schema_v1,reconciled'
+        });
+        return 'updated';
+    }
+    await Tools.Memory.create({
+        title: stableTitle,
+        content: entry.content,
+        source: source,
+        folderPath: GLOBAL_MEMORY_FOLDER,
+        tags: 'life,' + entry.category + ',auto,schema_v1,reconciled'
+    });
+    return 'created';
+}
+
+async function reconcileNativeMemory(force) {
+    var marker = await readJson(RECONCILE_FILE, null);
+    if (!force && marker && marker.completed) return { skipped: true, created: 0, updated: 0, unchanged: marker.unchanged || 0, failed: 0 };
+    var data = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+    var entries = serializeLifeEntries(data);
+    var result = { skipped: false, created: 0, updated: 0, unchanged: 0, failed: 0, total: entries.length };
+    for (var i = 0; i < entries.length; i++) {
+        try {
+            var action = await upsertLifeMemory(entries[i], 'character_memory_life_reconciled');
+            if (action === 'created') result.created++;
+            else if (action === 'updated') result.updated++;
+            else result.unchanged++;
+        } catch (e) {
+            result.failed++;
+            try { console.log('memory_system reconcile failed', entries[i].title, String(e)); } catch (_) {}
+        }
+    }
+    if (result.failed === 0) await writeJson(RECONCILE_FILE, { version: 1, completed: true, completedAt: new Date().toISOString(), total: result.total, unchanged: result.unchanged });
+    return result;
+}
+
 exports.analyze_saved_messages = async function (params) {
     try {
         var chatId = (params && params.chat_id) || '';
-        
-        // 如果没有传 chat_id，尝试获取最近对话
+
+        if (!chatId) {
+            var preferredPersona = await readJson(PERSONA_FILE, { type: '', id: '', name: '', chatId: '' });
+            if (preferredPersona.type === 'character_card' && preferredPersona.chatId) chatId = String(preferredPersona.chatId);
+        }
+
+        // 没有角色绑定对话时，尝试获取最近对话。
         if (!chatId) {
             try {
                 var chatList = await Tools.Chat.listChats({ sort_by: 'updatedAt', sort_order: 'desc', limit: 1 });
@@ -403,6 +688,11 @@ exports.analyze_saved_messages = async function (params) {
         // 每批token限制 = 上下文长度的80%
         var TOKEN_LIMIT_PER_BATCH = Math.floor(contextLength * 0.8);
         
+        var manualPersona = await readJson(PERSONA_FILE, { type: '', id: '', name: '', chatId: '' });
+        var manualPersonaMatches = !manualPersona.chatId || String(manualPersona.chatId) === String(chatId);
+        var manualCallerCardId = manualPersonaMatches && manualPersona.type === 'character_card' ? String(manualPersona.id || '') : '';
+        var manualPersonaName = manualCallerCardId ? String(manualPersona.name || '') : '';
+
         // 分批处理：按token数量动态计算每批消息
         var allResults = {
             events: [],
@@ -411,6 +701,10 @@ exports.analyze_saved_messages = async function (params) {
             finance: [],
             todos: [],
             menstrual: [],
+            character: [],
+            relationship: [],
+            preference: [],
+            interaction_rule: [],
             summaries: []
         };
         
@@ -433,7 +727,7 @@ exports.analyze_saved_messages = async function (params) {
                 batchTokens += msgTokens;
             }
             
-            var batchResult = await analyzeMessagesBatch(messages.slice(batchStart, batchStart + batchMessages.length), 0, batchMessages.length, endpoint, apiKey, model, existingSummary);
+            var batchResult = await analyzeMessagesBatch(messages.slice(batchStart, batchStart + batchMessages.length), 0, batchMessages.length, endpoint, apiKey, model, existingSummary, manualPersonaName);
             if (batchResult) {
                 if (batchResult.summary) allResults.summaries.push(batchResult.summary);
                 if (batchResult.events) allResults.events = allResults.events.concat(batchResult.events);
@@ -442,6 +736,10 @@ exports.analyze_saved_messages = async function (params) {
                 if (batchResult.finance) allResults.finance = allResults.finance.concat(batchResult.finance);
                 if (batchResult.todos) allResults.todos = allResults.todos.concat(batchResult.todos);
                 if (batchResult.menstrual) allResults.menstrual = allResults.menstrual.concat(batchResult.menstrual);
+                if (batchResult.character) allResults.character = allResults.character.concat(batchResult.character);
+                if (batchResult.relationship) allResults.relationship = allResults.relationship.concat(batchResult.relationship);
+                if (batchResult.preference) allResults.preference = allResults.preference.concat(batchResult.preference);
+                if (batchResult.interaction_rule) allResults.interaction_rule = allResults.interaction_rule.concat(batchResult.interaction_rule);
                 
                 // 更新 existingSummary 以便后续批次去重
                 var batchSummary = [];
@@ -461,15 +759,15 @@ exports.analyze_saved_messages = async function (params) {
         var now = new Date().toISOString();
 
         if (parsed.events)
-            current.events = current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || now; return e; }));
+            current.events = dedupeLifeEntries(current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || now; return e; })), 'events');
         if (parsed.contacts)
             current.contacts = mergeContacts(current.contacts, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || now; return c; }));
         if (parsed.info)
-            current.info = current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || now; return i; }));
+            current.info = dedupeLifeEntries(current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || now; return i; })), 'info');
         if (parsed.finance)
-            current.finance = current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || now; return f; }));
+            current.finance = dedupeLifeEntries(current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || now; return f; })), 'finance');
         if (parsed.todos)
-            current.todos = current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || now; if (t.completed === undefined) t.completed = false; return t; }));
+            current.todos = dedupeLifeEntries(current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || now; if (t.completed === undefined) t.completed = false; return t; })), 'todos');
         if (parsed.menstrual && parsed.menstrual.length > 0) {
             current.menstrual = current.menstrual.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || now; return m; }));
             var seen = {};
@@ -488,7 +786,8 @@ exports.analyze_saved_messages = async function (params) {
         if (current.todos.length > 500) current.todos.splice(0, current.todos.length - 500);
 
         await writeJson(EXTRACTED_FILE, current);
-  await syncExtractedToEnv();
+        await syncExtractedToEnv();
+        await persistParsedToNativeMemory(parsed, manualCallerCardId);
 
   // 记录已分析的对话
         var analyzedData = await readJson(DATA_DIR + '/analyzed_chats.json', { chats: [] });
@@ -507,7 +806,11 @@ exports.analyze_saved_messages = async function (params) {
             contacts: (parsed.contacts && parsed.contacts.length) || 0,
             info: (parsed.info && parsed.info.length) || 0,
             finance: (parsed.finance && parsed.finance.length) || 0,
-            todos: (parsed.todos && parsed.todos.length) || 0
+            todos: (parsed.todos && parsed.todos.length) || 0,
+            character: (parsed.character && parsed.character.length) || 0,
+            relationship: (parsed.relationship && parsed.relationship.length) || 0,
+            preference: (parsed.preference && parsed.preference.length) || 0,
+            interaction_rule: (parsed.interaction_rule && parsed.interaction_rule.length) || 0
         });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
@@ -683,6 +986,12 @@ exports.create_memory = async function (params) {
         var title = params.title || '';
         var content = params.content || '';
         var tags = params.tags || '';
+        var callerCardId = params.caller_card_id || '';
+        var source = params.source || (callerCardId ? 'character_memory_role_manual' : 'character_memory_life_manual');
+        var folderPath = personaMemoryFolder(callerCardId);
+        if (callerCardId && title.indexOf('[persona:') !== 0) {
+            title = '[persona:' + callerCardId + '] ' + title;
+        }
         if (!title || !content) {
             complete({ success: false, message: '标题和内容不能为空' });
             return;
@@ -690,7 +999,10 @@ exports.create_memory = async function (params) {
         var vectorResult = await Tools.Memory.create({
             title: title,
             content: content,
-            tags: tags ? tags.split(',').map(function(t){ return t.trim(); }).filter(Boolean) : undefined
+            source: source,
+            folderPath: folderPath,
+            tags: tags || undefined,
+            callerCardId: callerCardId || undefined
         });
         complete({
             success: !!vectorResult,
@@ -705,26 +1017,117 @@ exports.create_memory = async function (params) {
 // ===== load_memories：从向量库查询记忆 =====
 exports.load_memories = async function (params) {
     try {
-        var limit = parseInt(params.limit || '50', 10);
-        var queryText = params.query || '*';
-        var results = await Tools.Memory.query({
-            query: queryText,
-            limit: limit
-        });
-        var memories = [];
-        if (results && results.memories) {
-            memories = results.memories.map(function(m) {
-                return {
-                    id: m.id || m.title || '',
-                    title: m.title || '',
-                    content: m.content || '',
-                    tags: m.tags || [],
-                    timestamp: m.createdAt || m.timestamp || '',
-                    score: m.score || 0
-                };
-            });
+        params = params || {};
+        var limit = Math.max(1, Math.min(parseInt(params.limit || '50', 10) || 50, 500));
+        var rawQuery = String(params.query == null ? '' : params.query).trim();
+        var normalizedQuery = rawQuery.toLowerCase();
+        var fullQuery = !normalizedQuery || normalizedQuery === '*' || normalizedQuery === 'all';
+        var searchTerms = [];
+        if (!fullQuery) {
+            var termSeen = {};
+            function addTerm(term) {
+                term = String(term || '').trim();
+                if (term.length < 2 || termSeen[term]) return;
+                termSeen[term] = true;
+                searchTerms.push(term);
+            }
+            addTerm(normalizedQuery);
+            normalizedQuery.split(/[\s,，。！？、：:；;（）()]+/).forEach(addTerm);
+            var compact = normalizedQuery.replace(/[\s,，。！？、：:；;（）()]/g, '');
+            var ignored = { '什么': true, '我的': true, '一下': true, '这个': true, '那个': true, '是否': true };
+            for (var size = 4; size >= 2; size--) {
+                for (var pos = 0; pos + size <= compact.length; pos++) {
+                    var fragment = compact.substring(pos, pos + size);
+                    if (!ignored[fragment]) addTerm(fragment);
+                }
+            }
         }
-        complete({ success: true, memories: memories, total: memories.length });
+        var callerCardId = String(params.caller_card_id || '').trim();
+        var scope = String(params.scope || (callerCardId ? 'persona' : 'global')).toLowerCase();
+        if (scope !== 'global' && scope !== 'persona' && scope !== 'all') scope = callerCardId ? 'persona' : 'global';
+        if (scope === 'persona' && !callerCardId) {
+            complete({ success: false, message: 'persona 查询需要 caller_card_id' });
+            return;
+        }
+
+        var targets = [];
+        if (scope === 'global' || scope === 'all') targets.push({ name: 'global', folderPath: GLOBAL_MEMORY_FOLDER, callerCardId: '' });
+        if ((scope === 'persona' || scope === 'all') && callerCardId) targets.push({ name: 'persona', folderPath: personaMemoryFolder(callerCardId), callerCardId: callerCardId });
+        if (scope === 'all') targets.push({ name: 'default', folderPath: '', callerCardId: '' });
+
+        var merged = {};
+        function addMemory(memory, matchedBy, sourceScope) {
+            var title = String(memory.title || '');
+            var content = String(memory.content || '');
+            var key = title + '|' + content;
+            var existing = merged[key];
+            if (existing) {
+                if (existing.matched_by !== matchedBy) existing.matched_by = 'keyword+native';
+                if (Number(memory.score || 0) > existing.score) existing.score = Number(memory.score || 0);
+                if (existing.source_scope.indexOf(sourceScope) < 0) existing.source_scope += '+' + sourceScope;
+                return;
+            }
+            merged[key] = {
+                id: memory.id || title,
+                title: title,
+                content: content,
+                tags: memory.tags || [],
+                timestamp: memory.createdAt || memory.timestamp || '',
+                score: Number(memory.score || 0),
+                matched_by: matchedBy,
+                source_scope: sourceScope
+            };
+        }
+
+        for (var ti = 0; ti < targets.length; ti++) {
+            var target = targets[ti];
+            var allResult = await Tools.Memory.query({ query: '*', limit: 500, folderPath: target.folderPath, callerCardId: target.callerCardId || undefined });
+            var allMemories = allResult && allResult.memories ? allResult.memories : [];
+            if (target.name === 'default') allMemories = allMemories.filter(function(memory) { return String(memory.title || '').indexOf('[persona:') !== 0; });
+            // Operit 的通配查询只返回正文前 10 个字符。用原生 getByTitle 分批补全，
+            // 保持 Operit Memory 为唯一数据源，同时让本地关键词兜底能够匹配正文后半段。
+            for (var hi = 0; hi < allMemories.length; hi += 8) {
+                var hydrateBatch = allMemories.slice(hi, hi + 8);
+                await Promise.all(hydrateBatch.map(async function(memory) {
+                    if (!memory || !memory.title || !/\.\.\.$/.test(String(memory.content || ''))) return;
+                    try {
+                        var fullResult = await Tools.Memory.getByTitle({
+                            title: memory.title,
+                            callerCardId: target.callerCardId || undefined
+                        });
+                        var fullMemories = fullResult && fullResult.memories ? fullResult.memories : [];
+                        if (fullMemories.length && String(fullMemories[0].title || '') === String(memory.title)) {
+                            memory.content = String(fullMemories[0].content || memory.content || '');
+                        }
+                    } catch (e) { try { console.log('memory_system content hydration failed', memory.title, String(e)); } catch (_) {} }
+                }));
+            }
+            if (fullQuery) {
+                allMemories.forEach(function(memory) { addMemory(memory, 'all', target.name); });
+                continue;
+            }
+            allMemories.forEach(function(memory) {
+                var searchable = (String(memory.title || '') + '\n' + String(memory.content || '')).toLowerCase();
+                for (var sti = 0; sti < searchTerms.length; sti++) {
+                    if (searchable.indexOf(searchTerms[sti]) >= 0) { addMemory(memory, 'keyword', target.name); break; }
+                }
+            });
+            try {
+                var vectorResult = await Tools.Memory.query({ query: rawQuery, limit: limit, folderPath: target.folderPath, callerCardId: target.callerCardId || undefined });
+                var vectorMemories = vectorResult && vectorResult.memories ? vectorResult.memories : [];
+                vectorMemories.forEach(function(memory) { addMemory(memory, 'native', target.name); });
+            } catch (e) { try { console.log('memory_system native query failed', target.name, String(e)); } catch (_) {} }
+        }
+
+        var memories = Object.keys(merged).map(function(key) { return merged[key]; });
+        memories.sort(function(a, b) {
+            var ak = a.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
+            var bk = b.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
+            if (ak !== bk) return bk - ak;
+            return b.score - a.score;
+        });
+        memories = memories.slice(0, limit);
+        complete({ success: true, memories: memories, total: memories.length, scope: scope, query: fullQuery ? '*' : rawQuery });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
     }
@@ -735,14 +1138,15 @@ exports.delete_memory = async function (params) {
     try {
         var targetId = params.memory_id || '';
         var targetTitle = params.title || '';
+        var callerCardId = params.caller_card_id || '';
         if (!targetId && !targetTitle) {
             complete({ success: false, message: '缺少 memory_id 或 title' });
             return;
         }
         if (targetTitle) {
-            try { await Tools.Memory.deleteMemory(targetTitle); } catch(e) {}
+            await Tools.Memory.deleteMemory({ title: targetTitle, callerCardId: callerCardId || undefined });
         } else if (targetId) {
-            try { await Tools.Memory.deleteMemory(targetId); } catch(e) {}
+            await Tools.Memory.deleteMemory({ title: targetId, callerCardId: callerCardId || undefined });
         }
         complete({ success: true, message: '已从向量库删除' });
     } catch (e) {
@@ -771,6 +1175,10 @@ exports.get_analyzed_chats = async function () {
 //   5) 分析完成后写水位线、写 extracted.json、调 syncExtractedToEnv
 async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
     try {
+        var personaContext = await readJson(PERSONA_FILE, { type: '', id: '', name: '' });
+        var personaMatchesChat = !personaContext.chatId || String(personaContext.chatId) === String(chatId);
+        var callerCardId = personaMatchesChat && personaContext.type === 'character_card' ? String(personaContext.id || '') : '';
+        var personaName = callerCardId ? String(personaContext.name || '') : '';
         // 读现有数据用于去重
         var existingData = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
         var existingSummary = '';
@@ -791,7 +1199,7 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
         var apiKey = getEnv('MEMORY_SYSTEM_KEY');
         var model = getEnv('MEMORY_SYSTEM_MODEL') || 'gpt-4o-mini';
 
-        var allResults = { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [], summaries: [] };
+        var allResults = { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [], character: [], relationship: [], preference: [], interaction_rule: [], summaries: [] };
         var processedAny = false;
 
         if (endpoint && apiKey) {
@@ -817,7 +1225,7 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
                 batchTokens += msgTokens;
             }
 
-            var batchResult = await analyzeMessagesBatch(messages, 0, batchMessages.length, endpoint, apiKey, model, existingSummary);
+            var batchResult = await analyzeMessagesBatch(messages, 0, batchMessages.length, endpoint, apiKey, model, existingSummary, personaName);
             if (batchResult) {
                 processedAny = true;
                 if (batchResult.summary) allResults.summaries.push(batchResult.summary);
@@ -827,6 +1235,10 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
                 if (batchResult.finance) allResults.finance = allResults.finance.concat(batchResult.finance);
                 if (batchResult.todos) allResults.todos = allResults.todos.concat(batchResult.todos);
                 if (batchResult.menstrual) allResults.menstrual = allResults.menstrual.concat(batchResult.menstrual);
+                if (batchResult.character) allResults.character = allResults.character.concat(batchResult.character);
+                if (batchResult.relationship) allResults.relationship = allResults.relationship.concat(batchResult.relationship);
+                if (batchResult.preference) allResults.preference = allResults.preference.concat(batchResult.preference);
+                if (batchResult.interaction_rule) allResults.interaction_rule = allResults.interaction_rule.concat(batchResult.interaction_rule);
             }
         }
 
@@ -836,18 +1248,22 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
                             (parsed.contacts && parsed.contacts.length > 0) ||
                             (parsed.finance && parsed.finance.length > 0) ||
                             (parsed.info && parsed.info.length > 0) ||
-                            (parsed.menstrual && parsed.menstrual.length > 0);
+                            (parsed.menstrual && parsed.menstrual.length > 0) ||
+                            (parsed.character && parsed.character.length > 0) ||
+                            (parsed.relationship && parsed.relationship.length > 0) ||
+                            (parsed.preference && parsed.preference.length > 0) ||
+                            (parsed.interaction_rule && parsed.interaction_rule.length > 0);
 
         if (hasStructured) {
             var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
             if (!current.todos) current.todos = [];
             if (!current.finance) current.finance = [];
             var isoNow = new Date().toISOString();
-            if (parsed.events) current.events = current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || isoNow; return e; }));
+            if (parsed.events) current.events = dedupeLifeEntries(current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || isoNow; return e; })), 'events');
             if (parsed.contacts) current.contacts = mergeContacts(current.contacts, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || isoNow; return c; }));
-            if (parsed.info) current.info = current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || isoNow; return i; }));
-            if (parsed.finance) current.finance = current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || isoNow; return f; }));
-            if (parsed.todos) current.todos = current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || isoNow; if (t.completed === undefined) t.completed = false; return t; }));
+            if (parsed.info) current.info = dedupeLifeEntries(current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || isoNow; return i; })), 'info');
+            if (parsed.finance) current.finance = dedupeLifeEntries(current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || isoNow; return f; })), 'finance');
+            if (parsed.todos) current.todos = dedupeLifeEntries(current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || isoNow; if (t.completed === undefined) t.completed = false; return t; })), 'todos');
             if (parsed.menstrual && parsed.menstrual.length > 0) {
                 if (!current.menstrual) current.menstrual = [];
                 current.menstrual = current.menstrual.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || isoNow; return m; }));
@@ -863,6 +1279,8 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
             await writeJson(EXTRACTED_FILE, current);
             await syncExtractedToEnv();
         }
+
+        await persistParsedToNativeMemory(parsed, callerCardId);
 
         // 记录已分析的对话
         try {
@@ -880,11 +1298,14 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
             if (messages[mti].timestamp && messages[mti].timestamp > maxTs) maxTs = messages[mti].timestamp;
         }
         var stateAfter = await readJson(TRIGGER_STATE_FILE, {});
-        if (maxTs > 0) stateAfter.lastProcessedTs = maxTs;
+        if (!stateAfter.watermarks) stateAfter.watermarks = {};
+        if (maxTs > 0) stateAfter.watermarks[chatId] = maxTs;
         stateAfter.lastAnalyzedAt = new Date().toISOString();
         stateAfter.lastAnalyzedChatId = chatId || 'current';
         stateAfter.lastAnalyzedNewCount = messages.length;
         stateAfter.lastResult = hasStructured ? 'has_data' : 'no_data';
+        stateAfter.callerCardId = callerCardId;
+        stateAfter.personaName = personaName;
         await writeJson(TRIGGER_STATE_FILE, stateAfter);
 
         return { success: true, newMessageCount: messages.length, hasData: hasStructured };
@@ -897,7 +1318,13 @@ exports.trigger_analysis = async function (params) {
     try {
         var chatId = (params && params.chat_id) || '';
 
-        // 找最近对话（如果不传）
+        // 未指定时优先分析当前角色卡绑定的对话，避免把其他会话归入当前角色。
+        if (!chatId) {
+            var activePersona = await readJson(PERSONA_FILE, { type: '', id: '', name: '', chatId: '' });
+            if (activePersona.type === 'character_card' && activePersona.chatId) chatId = String(activePersona.chatId);
+        }
+
+        // 没有角色绑定对话时再选择最近对话。
         if (!chatId) {
             try {
                 var chatList = await Tools.Chat.listChats({ sort_by: 'updatedAt', sort_order: 'desc', limit: 1 });
@@ -927,7 +1354,11 @@ exports.trigger_analysis = async function (params) {
 
         // ===== 核心：用上次水位线过滤新消息 =====
         var triggerState = await readJson(TRIGGER_STATE_FILE, { lastProcessedTs: 0, lastAnalyzedAt: null });
-        var lastProcessedTs = triggerState.lastProcessedTs || 0;
+        var triggerPersona = await readJson(PERSONA_FILE, { type: '', id: '', name: '', chatId: '' });
+        var triggerPersonaMatches = !triggerPersona.chatId || String(triggerPersona.chatId) === String(chatId);
+        triggerState.callerCardId = triggerPersonaMatches && triggerPersona.type === 'character_card' ? String(triggerPersona.id || '') : '';
+        triggerState.personaName = triggerState.callerCardId ? String(triggerPersona.name || '') : '';
+        var lastProcessedTs = analysisWatermark(triggerState, chatId);
         var newMessages = allMessages;
         if (lastProcessedTs) {
             newMessages = allMessages.filter(function (m) { return m.timestamp > lastProcessedTs; });

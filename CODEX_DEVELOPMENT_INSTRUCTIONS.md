@@ -34,6 +34,12 @@ P6 导出迁移
 - 不大规模重写
 - 修改保持模块化
 
+Operit 权威来源：
+
+- 最终权威仓库：https://github.com/AAswordman/Operit
+- `D:\Operit` 是本地权威 Git 仓库；需要最新内容时按 AGENTS.md 的代理规则执行 `git pull` 后再判断 API。
+- 优先核对上游 `docs/`、`examples/types/` 和对应运行时实现；本项目 `docs/reference/` 仅为同步维护的摘要。
+
 每阶段测试：
 - 加载
 - UI

@@ -1,1 +1,40 @@
-{"schema_version":1,"toolpkg_id":"com.operit.memory_system","version":"1.2.0","main":"main.js","display_name":{"zh":"记忆系统","en":"Memory System"},"description":{"zh":"自动拦截保存用户消息，AI提取结构化生活事件与联系人数据，侧边栏UI展示。v1.2.0：新增 UI 状态持久化（ctx.setEnv 同步写入）——记录上次离开时的 Tab/搜索词/筛选/选中联系人/选中对话等，下次打开侧边栏直接恢复，无需重新刷新；消息 Tab 显示后端真实对话总数（已加载 N / 共 M）。","en":"Auto-save messages, extract structured data, and display it in the sidebar. v1.2.0: Added UI state persistence (ctx.setEnv sync write) — remembers last Tab/search/filter/selections across sessions with instant restore; Messages tab shows real backend total (loaded N / total M)."},"enabled_by_default":true,"env":[{"name":"MEMORY_SYSTEM_UI_STATE_FILE","description":{"zh":"可选：界面状态保存文件路径；默认使用系统数据目录中的last_ui_state.json。","en":"Optional UI state file path; defaults to last_ui_state.json."}}],"subpackages":[{"id":"memory_system","entry":"packages/memory_system.js","enabled_by_default":true,"display_name":{"zh":"记忆系统工具","en":"Memory System Tools"},"description":{"zh":"分析消息并提取结构化事件/联系人/信息数据","en":"Analyze messages and extract structured data"}}],"color":"#2196F3"}
+{
+  "schema_version": 1,
+  "toolpkg_id": "com.operit.character_memory_system",
+  "version": "1.5.2",
+  "main": "main.js",
+  "display_name": {
+    "zh": "角色记忆系统",
+    "en": "Character Memory System"
+  },
+  "description": {
+    "zh": "保留原生活助手六分类，并基于角色卡ID、Persona目录和Operit原生Memory Profile提供角色长期记忆、隔离召回、Prompt注入与角色管理界面；记忆注入采用官方附件方案，可在设置页开关并选择是否随消息保存。",
+    "en": "Preserves the six life-assistant categories and adds character-scoped long-term memory, isolated recall, prompt injection, and management UI through Operit native Memory Profiles and persona folders. Memory injection uses the official attachment scheme with a settings toggle for whether injected content is persisted with the message."
+  },
+  "enabled_by_default": true,
+  "env": [
+    {
+      "name": "MEMORY_SYSTEM_UI_STATE_FILE",
+      "description": {
+        "zh": "可选：界面状态保存文件路径；默认使用系统数据目录中的last_ui_state.json。",
+        "en": "Optional UI state file path; defaults to last_ui_state.json."
+      }
+    }
+  ],
+  "subpackages": [
+    {
+      "id": "memory_system",
+      "entry": "packages/memory_system.js",
+      "enabled_by_default": true,
+      "display_name": {
+        "zh": "角色记忆系统工具",
+        "en": "Character Memory System Tools"
+      },
+      "description": {
+        "zh": "分析生活与角色记忆，并通过Operit原生Memory与Persona目录隔离角色数据",
+        "en": "Analyze life and character memories with isolation through Operit native Memory and persona folders"
+      }
+    }
+  ],
+  "color": "#5E35B1"
+}

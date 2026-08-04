@@ -1,5 +1,7 @@
 # API 文档：`memory.d.ts`
 
+> 权威来源：`D:\Operit\examples\types\memory.d.ts`；说明性正文参考 `D:\Operit\docs\doc-src\package-dev\memory.md`。当两者存在时间差时，以类型定义和 Operit 源码为准。
+
 `memory.d.ts` 描述的是 `Tools.Memory` 命名空间，用于查询、创建、更新和组织记忆库内容，并管理记忆之间的链接关系。
 
 ## 作用
@@ -21,7 +23,7 @@ Tools.Memory
 
 ### 记忆查询与读取
 
-#### `query(query, folderPath?, limit?, startTime?, endTime?, snapshotId?, threshold?)`
+#### `query(query, folderPath?, limit?, startTime?, endTime?, snapshotId?, threshold?, callerCardId?)`
 
 ```ts
 query(
@@ -31,8 +33,19 @@ query(
   startTime?: string,
   endTime?: string,
   snapshotId?: string,
-  threshold?: number
+  threshold?: number,
+  callerCardId?: string
 ): Promise<MemoryQueryResultData>
+```
+
+也支持对象参数形式：
+
+```ts
+query({
+  query: string,
+  folderPath?, limit?, startTime?, endTime?, snapshotId?, threshold?,
+  callerCardId?
+}): Promise<MemoryQueryResultData>
 ```
 
 说明：
@@ -48,8 +61,9 @@ query(
 - `threshold` 是可选相关度阈值，要求 `>= 0`；只有得分不低于该阈值的记忆会被返回。`query_memory` 默认阈值为 `0`。
 - 返回结构体中包含 `memories[]`，每项有 `title`、`content`、`source`、`tags`、`createdAt`，文档型记忆还可能带 `chunkInfo` 与 `chunkIndices`。
 - 返回结构体还包含 `snapshotId`、`snapshotCreated`、`excludedBySnapshotCount`，用于分页式去重检索。
+- `callerCardId` 是可选的调用者角色卡 ID，用于选择该角色卡绑定的 Memory Profile。
 
-#### `getByTitle(title, chunkIndex?, chunkRange?, query?, limit?)`
+#### `getByTitle(title, chunkIndex?, chunkRange?, query?, limit?, callerCardId?)`
 
 通过精确标题读取记忆；当目标是文档型记忆时，可结合：
 
@@ -57,22 +71,28 @@ query(
 - `chunkRange?`，例如 `"3-7"`
 - `query?`，用于在文档内部进一步检索，支持自然语言、空格分隔短语、`|` 分隔多个关键词，以及在单个关键词内部使用 `*` 做模糊通配
 - `limit?`，仅在使用 `query` 检索文档分块时生效，表示最多返回多少个分块，默认 `20`
+- `callerCardId?`，用于选择调用者角色卡绑定的 Memory Profile
+
+同样支持 `{ title, chunkIndex?, chunkRange?, query?, limit?, callerCardId? }` 对象参数。
 
 返回值是 `Promise<string>`。
 
 ### 创建与更新
 
-#### `create(title, content, contentType?, source?, folderPath?, tags?)`
+#### `create(title, content, contentType?, source?, folderPath?, tags?, callerCardId?)`
 
 创建新记忆，默认注释值包括：
 
 - `contentType` 默认 `text/plain`
 - `source` 默认 `ai_created`
 - `folderPath` 默认空字符串
+- `callerCardId` 可选，用于选择角色卡绑定的 Memory Profile
+
+同样支持 `{ title, content, contentType?, source?, folderPath?, tags?, callerCardId? }` 对象参数。
 
 返回值是 `Promise<string>`。
 
-#### `update(oldTitle, updates?)`
+#### `update(oldTitle, updates?, callerCardId?)`
 
 ```ts
 update(oldTitle: string, updates?: {
@@ -83,41 +103,60 @@ update(oldTitle: string, updates?: {
   credibility?,
   importance?,
   folderPath?,
-  tags?
-}): Promise<string>
+  tags?,
+  callerCardId?
+}, callerCardId?: string): Promise<string>
 ```
+
+也支持单对象形式：`update({ oldTitle, newTitle?, content?, contentType?, source?, credibility?, importance?, folderPath?, tags?, callerCardId? })`。
 
 ### 删除与移动
 
-#### `deleteMemory(title)`
+#### `deleteMemory(title, callerCardId?)`
 
 删除单个记忆，返回 `Promise<string>`。
 
-#### `move(targetFolderPath, titles?, sourceFolderPath?)`
+也支持 `{ title, callerCardId? }` 对象参数。
+
+#### `move(targetFolderPath, titles?, sourceFolderPath?, callerCardId?)`
 
 批量移动记忆：
 
 - `titles` 可传字符串数组。
 - 也可传逗号分隔字符串。
 - `sourceFolderPath` 为空字符串时表示未分类目录。
+- `callerCardId` 用于选择角色卡绑定的 Memory Profile。
+- 也支持 `{ targetFolderPath, titles?, sourceFolderPath?, callerCardId? }` 对象参数。
 
 ## 记忆链接 API
 
-### `link(sourceTitle, targetTitle, linkType?, weight?, description?)`
+### `link(sourceTitle, targetTitle, linkType?, weight?, description?, callerCardId?)`
 
 创建记忆链接，返回 `MemoryLinkResultData`。
 
-### `queryLinks(linkId?, sourceTitle?, targetTitle?, linkType?, limit?)`
+也支持同字段的对象参数。
+
+### `queryLinks(linkId?, sourceTitle?, targetTitle?, linkType?, limit?, callerCardId?)`
 
 查询链接，返回 `MemoryLinkQueryResultData`。
 
-### `updateLink(linkId?, sourceTitle?, targetTitle?, linkType?, newLinkType?, weight?, description?)`
+也支持同字段的对象参数；`limit` 范围为 `1-200`，默认 `20`。
+
+### `updateLink(linkId?, sourceTitle?, targetTitle?, linkType?, newLinkType?, weight?, description?, callerCardId?)`
 
 更新已有链接，返回 `MemoryLinkResultData`。
 
-### `deleteLink(linkId?, sourceTitle?, targetTitle?, linkType?)`
+也支持同字段的对象参数。
+
+### `deleteLink(linkId?, sourceTitle?, targetTitle?, linkType?, callerCardId?)`
 
 删除链接，返回 `Promise<string>`。
+
+也支持同字段的对象参数。
+
+## 角色卡作用域
+
+权威类型定义为所有 Memory 主体与链接操作提供了 `callerCardId`。宿主使用它选择该角色卡绑定的 Memory Profile，因此角色隔离应优先使用这一原生能力，而不是自行创建独立记忆数据库；具体绑定关系与未传参数时的选择行为由 Operit 宿主管理。
 
 ## 返回值特点
 

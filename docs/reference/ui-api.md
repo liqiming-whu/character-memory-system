@@ -1,5 +1,7 @@
 # API 文档：`ui.d.ts`
 
+> 权威来源：`D:\Operit\examples\types\ui.d.ts`；说明性正文参考 `D:\Operit\docs\doc-src\package-dev\ui.md`。当两者存在时间差时，以类型定义和 Operit 源码为准。
+
 `ui.d.ts` 描述了两层 UI 能力：
 
 - `Tools.UI`：直接执行点击、输入、滑动等动作。
@@ -21,6 +23,10 @@ UINode
 #### `getPageInfo()`
 
 获取当前页面信息，返回 `UIPageResultData`。
+
+#### `captureScreenshot()`
+
+截取当前屏幕并返回已保存文件的路径，返回 `Promise<string>`。
 
 ### 直接动作
 
