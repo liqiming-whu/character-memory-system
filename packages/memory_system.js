@@ -52,6 +52,28 @@ METADATA
             ]
         },
         {
+            "name": "export_backup",
+            "description": { "zh": "导出数据备份（六类生活数据、设置、角色上下文等），打包为 ZIP", "en": "Export data backup (six life categories, settings, persona context) as ZIP" },
+            "parameters": [
+                { "name": "reason", "type": "string", "required": false, "description": "备份原因，用于 manifest" }
+            ]
+        },
+        {
+            "name": "inspect_backup",
+            "description": { "zh": "检查备份文件的有效性（manifest 与摘要校验）", "en": "Inspect a backup file for validity (manifest and digest)" },
+            "parameters": [
+                { "name": "path", "type": "string", "required": true, "description": "备份 ZIP 路径" }
+            ]
+        },
+        {
+            "name": "restore_backup",
+            "description": { "zh": "从备份恢复数据，merge 合并或 overwrite 覆盖", "en": "Restore data from a backup, merge or overwrite" },
+            "parameters": [
+                { "name": "path", "type": "string", "required": true, "description": "备份 ZIP 路径" },
+                { "name": "mode", "type": "string", "required": false, "description": "merge 或 overwrite，默认 merge" }
+            ]
+        },
+        {
             "name": "toggle_todo",
             "description": { "zh": "切换待办事项的完成状态", "en": "Toggle todo item completion status" },
             "parameters": [
@@ -130,8 +152,15 @@ METADATA
 const prompts = require("./prompts");
 var buildExtractionPrompt = prompts.buildExtractionPrompt;
 var buildTopicCheckPrompt = prompts.buildTopicCheckPrompt;
+const life_store = require("./life_store");
+var readCategory = life_store.readCategory;
+var updateCategory = life_store.updateCategory;
+var loadAll = life_store.loadAll;
+var setCategory = life_store.setCategory;
+var flush = life_store.flush;
+var migrateIfNeeded = life_store.migrateIfNeeded;
+var resetCache = life_store.resetCache;
 var DATA_DIR = '/sdcard/Download/Operit/character_memory_system_data';
-var EXTRACTED_FILE = DATA_DIR + '/extracted.json';
 var PERSONA_FILE = DATA_DIR + '/active_persona.json';
 var RECONCILE_FILE = DATA_DIR + '/reconcile_v1_4_0.json';
 var SETTINGS_FILE = DATA_DIR + '/settings.json';
@@ -185,7 +214,7 @@ async function readUiState() {
 
 async function writeUiState(state) {
     try {
-        await Tools.Files.makeDirectory(DATA_DIR, true);
+        await Tools.Files.mkdir(DATA_DIR, true);
         await writeJson(getUiStatePath(), {
             version: 1,
             savedAt: new Date().toISOString(),
@@ -196,9 +225,7 @@ async function writeUiState(state) {
 
 async function syncExtractedToEnv() {
     try {
-        var ext = await readJson(EXTRACTED_FILE, {
-            events: [], contacts: [], info: [], finance: [], todos: [], menstrual: []
-        });
+        var ext = await loadAll();
         if (!ext.todos) ext.todos = [];
         if (!ext.finance) ext.finance = [];
         var events = (ext.events || []).slice(-200);
@@ -303,7 +330,8 @@ exports.save_ui_state = async function (params) {
 // ===== load_saved_data：返回本地结构化数据；长期记忆由 load_memories 查询原生 Memory =====
 exports.load_saved_data = async function () {
     try {
-        var ext = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+        await migrateIfNeeded();
+        var ext = await loadAll();
         if (!ext.todos) ext.todos = [];
         if (!ext.finance) ext.finance = [];
         // 历史对账改为后台异步执行：首次对账可能遍历大量条目较慢，
@@ -369,7 +397,7 @@ async function readInjectionSettings() {
 
 async function writeInjectionSettings(settings) {
     var next = sanitizeInjectionSettings(settings);
-    try { await Tools.Files.makeDirectory(DATA_DIR, true); } catch (e) {}
+    try { await Tools.Files.mkdir(DATA_DIR, true); } catch (e) {}
     await writeJson(SETTINGS_FILE, { version: 1, updatedAt: new Date().toISOString(), injection: next });
     return next;
 }
@@ -586,7 +614,7 @@ async function upsertLifeMemory(entry, source) {
 async function reconcileNativeMemory(force) {
     var marker = await readJson(RECONCILE_FILE, null);
     if (!force && marker && marker.completed) return { skipped: true, created: 0, updated: 0, unchanged: marker.unchanged || 0, failed: 0 };
-    var data = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+    var data = await loadAll();
     var entries = serializeLifeEntries(data);
     var result = { skipped: false, created: 0, updated: 0, unchanged: 0, failed: 0, total: entries.length };
     for (var i = 0; i < entries.length; i++) {
@@ -662,7 +690,7 @@ exports.analyze_saved_messages = async function (params) {
         }
 
         // 读取已有数据用于去重
-        var existingData = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+        var existingData = await loadAll();
         var existingSummary = '';
         if (existingData) {
             var ep = [];
@@ -751,39 +779,34 @@ exports.analyze_saved_messages = async function (params) {
         }
 
         var parsed = allResults;
-        var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-        if (!current.todos) current.todos = [];
-        if (!current.finance) current.finance = [];
         var now = new Date().toISOString();
 
         if (parsed.events)
-            current.events = dedupeLifeEntries(current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || now; return e; })), 'events');
+            await updateCategory('events', function(rows) { return dedupeLifeEntries(rows.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || now; return e; })), 'events'); });
         if (parsed.contacts)
-            current.contacts = mergeContacts(current.contacts, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || now; return c; }));
+            await updateCategory('contacts', function(rows) { return mergeContacts(rows, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || now; return c; })); });
         if (parsed.info)
-            current.info = dedupeLifeEntries(current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || now; return i; })), 'info');
+            await updateCategory('info', function(rows) { return dedupeLifeEntries(rows.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || now; return i; })), 'info'); });
         if (parsed.finance)
-            current.finance = dedupeLifeEntries(current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || now; return f; })), 'finance');
+            await updateCategory('finance', function(rows) { return dedupeLifeEntries(rows.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || now; return f; })), 'finance'); });
         if (parsed.todos)
-            current.todos = dedupeLifeEntries(current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || now; if (t.completed === undefined) t.completed = false; return t; })), 'todos');
+            await updateCategory('todos', function(rows) { return dedupeLifeEntries(rows.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || now; if (t.completed === undefined) t.completed = false; return t; })), 'todos'); });
         if (parsed.menstrual && parsed.menstrual.length > 0) {
-            current.menstrual = current.menstrual.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || now; return m; }));
-            var seen = {};
-            current.menstrual = current.menstrual.filter(function (m) {
-                if (seen[m.startDate]) return false;
-                seen[m.startDate] = true;
-                return true;
+            await updateCategory('menstrual', function(rows) {
+                var merged = rows.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || now; return m; }));
+                var seen = {};
+                merged = merged.filter(function (m) {
+                    if (seen[m.startDate]) return false;
+                    seen[m.startDate] = true;
+                    return true;
+                });
+                merged.sort(function (a, b) { return a.startDate.localeCompare(b.startDate); });
+                return merged;
             });
-            current.menstrual.sort(function (a, b) { return a.startDate.localeCompare(b.startDate); });
         }
 
-        if (current.events.length > 500) current.events.splice(0, current.events.length - 500);
-        if (current.contacts.length > 500) current.contacts.splice(0, current.contacts.length - 500);
-        if (current.info.length > 500) current.info.splice(0, current.info.length - 500);
-        if (current.finance.length > 500) current.finance.splice(0, current.finance.length - 500);
-        if (current.todos.length > 500) current.todos.splice(0, current.todos.length - 500);
-
-        await writeJson(EXTRACTED_FILE, current);
+        // 各分类超过 500 条时截断（在 updateCategory 内做容量控制）
+        await flush();
         await syncExtractedToEnv();
         await persistParsedToNativeMemory(parsed, manualCallerCardId);
 
@@ -818,16 +841,16 @@ exports.analyze_saved_messages = async function (params) {
 exports.toggle_todo = async function (params) {
     try {
         var idx = params.todo_index;
-        var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-        if (!current.todos) current.todos = [];
-        if (idx < 0 || idx >= current.todos.length) {
+        var todos = await readCategory('todos');
+        if (idx < 0 || idx >= todos.length) {
             complete({ success: false, message: '索引越界' });
             return;
         }
-        current.todos[idx].completed = !current.todos[idx].completed;
-        await writeJson(EXTRACTED_FILE, current);
+        var next = todos.slice();
+        next[idx] = Object.assign({}, next[idx], { completed: !next[idx].completed });
+        await setCategory('todos', next);
   await syncExtractedToEnv();
-  complete({ success: true, message: current.todos[idx].completed ? '已标记完成' : '已取消完成', todo: current.todos[idx] });
+  complete({ success: true, message: next[idx].completed ? '已标记完成' : '已取消完成', todo: next[idx] });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
     }
@@ -836,10 +859,7 @@ exports.toggle_todo = async function (params) {
 exports.save_todos = async function (params) {
     try {
         var todos = JSON.parse(params.todos_json);
-        var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-        if (!current.todos) current.todos = [];
-        current.todos = todos;
-        await writeJson(EXTRACTED_FILE, current);
+        await setCategory('todos', todos);
   await syncExtractedToEnv();
   complete({ success: true, message: '保存成功', count: todos.length });
     } catch (e) {
@@ -851,23 +871,23 @@ exports.sync_to_env = async function (params) {
     try {
         // 如果带了 action 参数，执行删除或编辑
         if (params && params.action) {
-            var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
             var cat = params.category || '';
             var idx = parseInt(params.index || '-1', 10);
-            if (cat && current[cat]) {
-                if (params.action === 'delete' && idx >= 0 && idx < current[cat].length) {
-                    current[cat].splice(idx, 1);
-                    await writeJson(EXTRACTED_FILE, current);
-                } else if (params.action === 'upsert') {
-                    var data = JSON.parse(params.data_json || '{}');
-                    if (idx >= 0 && idx < current[cat].length) {
-                        current[cat][idx] = data;
-                    } else {
-                        if (!data.timestamp) data.timestamp = new Date().toISOString();
-                        current[cat].push(data);
-                    }
-                    await writeJson(EXTRACTED_FILE, current);
+            var rows = await readCategory(cat);
+            if (params.action === 'delete' && idx >= 0 && idx < rows.length) {
+                rows = rows.slice();
+                rows.splice(idx, 1);
+                await setCategory(cat, rows);
+            } else if (params.action === 'upsert') {
+                var data = JSON.parse(params.data_json || '{}');
+                rows = rows.slice();
+                if (idx >= 0 && idx < rows.length) {
+                    rows[idx] = data;
+                } else {
+                    if (!data.timestamp) data.timestamp = new Date().toISOString();
+                    rows.push(data);
                 }
+                await setCategory(cat, rows);
             }
         }
   await syncExtractedToEnv();
@@ -885,15 +905,16 @@ exports.delete_extracted_item = async function (params) {
             complete({ success: false, message: '参数错误' });
             return;
         }
-        var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-        if (!current[category] || index >= current[category].length) {
+        var rows = await readCategory(category);
+        if (index >= rows.length) {
             complete({ success: false, message: '索引越界' });
             return;
         }
-        current[category].splice(index, 1);
-        await writeJson(EXTRACTED_FILE, current);
+        rows = rows.slice();
+        rows.splice(index, 1);
+        await setCategory(category, rows);
   await syncExtractedToEnv();
-  complete({ success: true, message: '已删除', remaining: current[category].length });
+  complete({ success: true, message: '已删除', remaining: rows.length });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
     }
@@ -909,24 +930,24 @@ exports.upsert_extracted_item = async function (params) {
             complete({ success: false, message: '缺少 category' });
             return;
         }
-        var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-        if (!current[category]) current[category] = [];
+        var rows = await readCategory(category);
         var now = new Date().toISOString();
         if (indexStr !== undefined && indexStr !== null && indexStr !== '') {
             var idx = parseInt(indexStr, 10);
-            if (idx >= 0 && idx < current[category].length) {
-                current[category][idx] = data;
+            if (idx >= 0 && idx < rows.length) {
+                rows = rows.slice();
+                rows[idx] = data;
             } else {
                 complete({ success: false, message: '索引越界' });
                 return;
             }
         } else {
             if (!data.timestamp) data.timestamp = now;
-            current[category].push(data);
+            rows = rows.concat([data]);
         }
-        await writeJson(EXTRACTED_FILE, current);
+        await setCategory(category, rows);
   await syncExtractedToEnv();
-  complete({ success: true, message: '已保存', count: current[category].length });
+  complete({ success: true, message: '已保存', count: rows.length });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
     }
@@ -1178,7 +1199,7 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
         var callerCardId = personaMatchesChat && personaContext.type === 'character_card' ? String(personaContext.id || '') : '';
         var personaName = callerCardId ? String(personaContext.name || '') : '';
         // 读现有数据用于去重
-        var existingData = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+        var existingData = await loadAll();
         var existingSummary = '';
         if (existingData) {
             var ep = [];
@@ -1253,28 +1274,22 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
                             (parsed.interaction_rule && parsed.interaction_rule.length > 0);
 
         if (hasStructured) {
-            var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-            if (!current.todos) current.todos = [];
-            if (!current.finance) current.finance = [];
             var isoNow = new Date().toISOString();
-            if (parsed.events) current.events = dedupeLifeEntries(current.events.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || isoNow; return e; })), 'events');
-            if (parsed.contacts) current.contacts = mergeContacts(current.contacts, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || isoNow; return c; }));
-            if (parsed.info) current.info = dedupeLifeEntries(current.info.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || isoNow; return i; })), 'info');
-            if (parsed.finance) current.finance = dedupeLifeEntries(current.finance.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || isoNow; return f; })), 'finance');
-            if (parsed.todos) current.todos = dedupeLifeEntries(current.todos.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || isoNow; if (t.completed === undefined) t.completed = false; return t; })), 'todos');
+            if (parsed.events) await updateCategory('events', function(rows) { return dedupeLifeEntries(rows.concat(parsed.events.map(function (e) { e.timestamp = e.timestamp || isoNow; return e; })), 'events'); });
+            if (parsed.contacts) await updateCategory('contacts', function(rows) { return mergeContacts(rows, parsed.contacts.map(function (c) { c.timestamp = c.timestamp || isoNow; return c; })); });
+            if (parsed.info) await updateCategory('info', function(rows) { return dedupeLifeEntries(rows.concat(parsed.info.map(function (i) { i.timestamp = i.timestamp || isoNow; return i; })), 'info'); });
+            if (parsed.finance) await updateCategory('finance', function(rows) { return dedupeLifeEntries(rows.concat(parsed.finance.map(function (f) { f.timestamp = f.timestamp || isoNow; return f; })), 'finance'); });
+            if (parsed.todos) await updateCategory('todos', function(rows) { return dedupeLifeEntries(rows.concat(parsed.todos.map(function (t) { t.timestamp = t.timestamp || isoNow; if (t.completed === undefined) t.completed = false; return t; })), 'todos'); });
             if (parsed.menstrual && parsed.menstrual.length > 0) {
-                if (!current.menstrual) current.menstrual = [];
-                current.menstrual = current.menstrual.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || isoNow; return m; }));
-                var seen = {};
-                current.menstrual = current.menstrual.filter(function (m) { if (seen[m.startDate]) return false; seen[m.startDate] = true; return true; });
-                current.menstrual.sort(function (a, b) { return a.startDate.localeCompare(b.startDate); });
+                await updateCategory('menstrual', function(rows) {
+                    var merged = rows.concat(parsed.menstrual.filter(function (m) { return m.startDate; }).map(function (m) { m.timestamp = m.timestamp || isoNow; return m; }));
+                    var seen = {};
+                    merged = merged.filter(function (m) { if (seen[m.startDate]) return false; seen[m.startDate] = true; return true; });
+                    merged.sort(function (a, b) { return a.startDate.localeCompare(b.startDate); });
+                    return merged;
+                });
             }
-            if (current.events.length > 500) current.events.splice(0, current.events.length - 500);
-            if (current.contacts.length > 500) current.contacts.splice(0, current.contacts.length - 500);
-            if (current.info.length > 500) current.info.splice(0, current.info.length - 500);
-            if (current.finance.length > 500) current.finance.splice(0, current.finance.length - 500);
-            if (current.todos.length > 500) current.todos.splice(0, current.todos.length - 500);
-            await writeJson(EXTRACTED_FILE, current);
+            await flush();
             await syncExtractedToEnv();
         }
 
@@ -1414,5 +1429,281 @@ exports.trigger_analysis = async function (params) {
         });
     } catch (e) {
         complete({ success: false, error: e.message || String(e) });
+    }
+};
+
+// ===== 数据备份导入导出（参考 whereabouts backup_store）=====
+var BACKUP_DIR = DATA_DIR + '/backups';
+
+function md5Digest(text) {
+    // 简化的内容摘要（无 CryptoJS 时用定长 hash）
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return 'fnv:' + (hash >>> 0).toString(36);
+}
+
+async function backupFileExists(path) {
+    try {
+        var r = await Tools.Files.exists(path, 'android');
+        return !!(r && r.exists);
+    } catch (e) { return false; }
+}
+
+async function readFileText(path) {
+    try {
+        var res = await Tools.Files.read(path);
+        if (res && typeof res.content === 'string') return res.content;
+        if (res && typeof res === 'string') return res;
+    } catch (e) {}
+    return '';
+}
+
+async function writeFileText(path, text) {
+    await Tools.Files.write(path, text, false, 'android');
+}
+
+// 导出：收集数据文件 + manifest → ZIP 到 backups/
+exports.export_backup = async function (params) {
+    try {
+        // 能力检测：定位 not a function 的具体方法
+        var required = ['read', 'write', 'exists', 'info', 'list', 'deleteFile', 'move', 'mkdir'];
+        for (var ri = 0; ri < required.length; ri++) {
+            if (typeof Tools.Files[required[ri]] !== 'function') {
+                complete({ success: false, message: '导出失败：当前环境缺少 Tools.Files.' + required[ri] });
+                return;
+            }
+        }
+        if (typeof Tools.Files.zip !== 'function') {
+            complete({ success: false, message: '导出失败：当前环境缺少 Tools.Files.zip（无法打包）' });
+            return;
+        }
+
+        await life_store.flush();
+        await Tools.Files.mkdir(BACKUP_DIR, true);
+        var stage = BACKUP_DIR + '/.stage_' + Date.now();
+        await Tools.Files.mkdir(stage + '/data', true);
+        var manifestFiles = [];
+        var fileEntries = {};
+
+        // 收集六类数据
+        var all = await loadAll();
+        var cats = ['events', 'contacts', 'info', 'todos', 'finance', 'menstrual'];
+        for (var ci = 0; ci < cats.length; ci++) {
+            var catText = JSON.stringify({ schemaVersion: 1, updatedAt: Date.now(), rows: all[cats[ci]] || [] }, null, 2);
+            var catPath = stage + '/data/' + cats[ci] + '.json';
+            await writeFileText(catPath, catText);
+            fileEntries['data/' + cats[ci] + '.json'] = catText;
+            manifestFiles.push({ path: 'data/' + cats[ci] + '.json', size: catText.length, digest: md5Digest(catText) });
+        }
+
+        // 收集其他配置/状态文件
+        var otherFiles = {
+            'settings.json': SETTINGS_FILE,
+            'active_persona.json': PERSONA_FILE,
+            'reconcile_v1_4_0.json': RECONCILE_FILE,
+            'last_ui_state.json': DATA_DIR + '/last_ui_state.json'
+        };
+        for (var ok in otherFiles) {
+            try {
+                var text = await readFileText(otherFiles[ok]);
+                if (!text || !text.trim()) continue;
+                var target = ok.indexOf('data/') === 0 ? stage + '/' + ok : stage + '/' + ok;
+                if (ok.indexOf('data/') === 0) {
+                    target = stage + '/' + ok;
+                } else {
+                    target = stage + '/' + ok;
+                }
+                await writeFileText(target, text);
+                fileEntries[ok] = text;
+                manifestFiles.push({ path: ok, size: text.length, digest: md5Digest(text) });
+            } catch (e) {}
+        }
+
+        var manifest = {
+            format: 'character-memory-backup',
+            version: 1,
+            createdAt: Date.now(),
+            reason: String(params && params.reason || 'manual').slice(0, 80),
+            digestAlgorithm: 'fnv1a',
+            files: manifestFiles
+        };
+        await writeFileText(stage + '/manifest.json', JSON.stringify(manifest, null, 2));
+        fileEntries['manifest.json'] = JSON.stringify(manifest, null, 2);
+
+        // 打成 ZIP（zip 可用时）；不可用则退化为仅生成文件集
+        var ts = Date.now();
+        var zipName = 'character_memory_' + ts + '.zip';
+        var zipPath = BACKUP_DIR + '/' + zipName;
+        var zipOk = false;
+        try {
+            if (typeof Tools.Files.zip === 'function') {
+                var zr = await Tools.Files.zip(stage, zipPath, 'android', false);
+                // 官方成功标志是 successful（旧版可能用 success，两个都兼容）
+                if (zr && (zr.successful === false || zr.success === false)) throw new Error('zip failed');
+                zipOk = true;
+            }
+        } catch (e) {
+            // zip 失败则退化为文件集导出（保留 stage 目录，不打包）
+            zipOk = false;
+        }
+
+        var finalPath;
+        if (zipOk) {
+            // zip 成功：清理 stage
+            finalPath = zipPath;
+            try {
+                var entries = await Tools.Files.list(stage, 'android');
+                if (entries && entries.entries) {
+                    for (var si = 0; si < entries.entries.length; si++) {
+                        try { await Tools.Files.deleteFile(stage + '/' + entries.entries[si].name, true, 'android'); } catch (e) {}
+                    }
+                }
+                await Tools.Files.deleteFile(stage, true, 'android');
+            } catch (e) {}
+        } else {
+            // zip 失败：把 stage 重命名为固定导出目录，供文件集方式恢复
+            var exportDir = BACKUP_DIR + '/export_' + ts;
+            try {
+                if (Tools.Files.move) {
+                    try { await Tools.Files.move(stage, exportDir, 'android'); finalPath = exportDir; }
+                    catch (e) { finalPath = stage; }
+                } else { finalPath = stage; }
+            } catch (e) { finalPath = stage; }
+        }
+
+        complete({ success: true, path: finalPath, fileName: zipOk ? zipName : '（文件集模式）', packed: zipOk, fileCount: manifestFiles.length, reason: manifest.reason, createdAt: manifest.createdAt });
+    } catch (e) {
+        complete({ success: false, message: '导出失败: ' + (e.message || String(e)) });
+    }
+};
+
+// 检查备份：解压到临时目录校验 manifest + digest
+exports.inspect_backup = async function (params) {
+    try {
+        var backupPath = String(params && params.path || '');
+        if (!backupPath) { complete({ success: false, message: '缺少备份路径' }); return; }
+        var info = await Tools.Files.info(backupPath, 'android');
+        if (!info || !info.exists || String(info.fileType).toLowerCase() !== 'file') {
+            complete({ success: false, message: '备份文件不存在' }); return;
+        }
+        var inspectDir = BACKUP_DIR + '/.inspect_' + Date.now();
+        await Tools.Files.mkdir(inspectDir, true);
+        var sourceDir = inspectDir;
+        try {
+            // 支持 ZIP 文件或文件集目录两种路径
+            var isDir = info && String(info.fileType).toLowerCase() === 'directory';
+            if (isDir) {
+                sourceDir = backupPath;
+            } else {
+                if (typeof Tools.Files.unzip !== 'function') {
+                    complete({ success: false, message: '检查失败：当前环境缺少 Tools.Files.unzip' });
+                    return;
+                }
+                await Tools.Files.unzip(backupPath, inspectDir, 'android');
+            }
+            var manifestRaw = await readFileText(sourceDir + '/manifest.json');
+            var manifest = JSON.parse(manifestRaw);
+            if (!manifest || manifest.format !== 'character-memory-backup' || manifest.version !== 1) {
+                complete({ success: false, message: '不是有效的 Character Memory 备份' }); return;
+            }
+            var ok = 0, bad = 0;
+            for (var i = 0; i < (manifest.files || []).length; i++) {
+                var f = manifest.files[i];
+                var text = await readFileText(sourceDir + '/' + f.path);
+                if (md5Digest(text) === f.digest && text.length === f.size) ok++;
+                else bad++;
+            }
+            complete({ success: bad === 0, valid: bad === 0, version: manifest.version, createdAt: manifest.createdAt, reason: manifest.reason, fileCount: (manifest.files || []).length, okFiles: ok, badFiles: bad });
+        } finally {
+            if (!(info && String(info.fileType).toLowerCase() === 'directory')) {
+                try { await Tools.Files.deleteFile(inspectDir, true, 'android'); } catch (e) {}
+            }
+        }
+    } catch (e) {
+        complete({ success: false, message: '检查失败: ' + (e.message || String(e)) });
+    }
+};
+
+// 恢复：merge 逐类合并（已存在的保留，按时间戳新的优先）；overwrite 直接替换（前先保护性导出）
+exports.restore_backup = async function (params) {
+    try {
+        var backupPath = String(params && params.path || '');
+        var mode = String(params && params.mode || 'merge');
+        if (mode !== 'merge' && mode !== 'overwrite') { complete({ success: false, message: '恢复模式只能是 merge 或 overwrite' }); return; }
+        if (!backupPath) { complete({ success: false, message: '缺少备份路径' }); return; }
+        var info = await Tools.Files.info(backupPath, 'android');
+        if (!info || !info.exists) { complete({ success: false, message: '备份文件不存在' }); return; }
+
+        // overwrite 前保护性备份（触发式，不等待 complete 回调）
+        if (mode === 'overwrite') {
+            try {
+                exports.export_backup({ reason: 'before-overwrite-restore' }).catch(function() {});
+            } catch (e) {}
+        }
+
+        var restoreDir = BACKUP_DIR + '/.restore_' + Date.now();
+        await Tools.Files.mkdir(restoreDir + '/data', true);
+        var sourceDir = restoreDir;
+        try {
+            var isDir = info && String(info.fileType).toLowerCase() === 'directory';
+            if (!isDir) {
+                if (typeof Tools.Files.unzip !== 'function') {
+                    complete({ success: false, message: '恢复失败：当前环境缺少 Tools.Files.unzip' });
+                    return;
+                }
+                await Tools.Files.unzip(backupPath, restoreDir, 'android');
+            } else {
+                sourceDir = backupPath;
+            }
+            var manifestRaw = await readFileText(sourceDir + '/manifest.json');
+            var manifest = JSON.parse(manifestRaw);
+            if (!manifest || manifest.format !== 'character-memory-backup') {
+                complete({ success: false, message: '不是有效的 Character Memory 备份' }); return;
+            }
+
+            // 恢复六类数据
+            var cats = ['events', 'contacts', 'info', 'todos', 'finance', 'menstrual'];
+            for (var ci = 0; ci < cats.length; ci++) {
+                var catText = await readFileText(sourceDir + '/data/' + cats[ci] + '.json');
+                if (!catText) continue;
+                var catData = JSON.parse(catText);
+                var rows = catData && Array.isArray(catData.rows) ? catData.rows : [];
+                if (mode === 'overwrite') {
+                    await setCategory(cats[ci], rows);
+                } else {
+                    // merge：已存在的保留，新条目按 id/标题 判断（简单合并）
+                    await updateCategory(cats[ci], function(existing) {
+                        var seen = {};
+                        existing.forEach(function(x) { seen[String(x.id || x.title || JSON.stringify(x))] = true; });
+                        var added = rows.filter(function(x) { return !seen[String(x.id || x.title || JSON.stringify(x))]; });
+                        return existing.concat(added);
+                    });
+                }
+            }
+
+            // 恢复 settings / persona（overwrite 才覆盖 settings）
+            var settingsText = await readFileText(sourceDir + '/settings.json');
+            if (settingsText && mode === 'overwrite') {
+                try { await writeJson(SETTINGS_FILE, JSON.parse(settingsText)); } catch (e) {}
+            }
+            var personaText = await readFileText(sourceDir + '/active_persona.json');
+            if (personaText && mode === 'overwrite') {
+                try { await writeJson(PERSONA_FILE, JSON.parse(personaText)); } catch (e) {}
+            }
+
+            await life_store.flush();
+            await syncExtractedToEnv();
+            life_store.resetCache();
+            complete({ success: true, mode: mode, restoredAt: Date.now(), sourceCreatedAt: manifest.createdAt, fileCount: (manifest.files || []).length });
+        } finally {
+            if (!(info && String(info.fileType).toLowerCase() === 'directory')) {
+                try { await Tools.Files.deleteFile(restoreDir, true, 'android'); } catch (e) {}
+            }
+        }
+    } catch (e) {
+        complete({ success: false, message: '恢复失败: ' + (e.message || String(e)) });
     }
 };

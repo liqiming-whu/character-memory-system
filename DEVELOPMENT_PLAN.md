@@ -493,13 +493,13 @@ Memory Core兼容：
 
 ---
 
-# 11. v1.5.2 数据备份导入导出计划
+# 11. v1.5.5 数据备份导入导出
 
-状态：`[未开始]`。参考实现为 `docs/reference_plugins/` 中 `com-operit-whereabouts-v0.4.23.toolpkg` 的 `shared/backup_store.js`（Tier 2 Structured Life Layer / Backup Layer）。本计划把该插件的备份设计吸收进 Character Memory System：设置、六类结构化生活数据、角色 Persona 数据与当前角色上下文一起打包导出，并支持校验后的导入恢复。
+状态：`[已实现，待实机验证]`。参考实现为 `docs/reference_plugins/` 中 `com-operit-whereabouts-v0.4.23.toolpkg` 的 `shared/backup_store.js`（Tier 2 Structured Life Layer / Backup Layer）。已实现 `export_backup` / `inspect_backup` / `restore_backup` 三个工具。
 
 ## 目标与边界
 
-- 目标：一键导出插件全部本地可导出数据（含 `settings.json` 注入设置、`extracted.json` 六分类、`active_persona.json`、`reconcile_v1_4_0.json` 标记、UI 状态），并可从 ZIP 校验后导入。
+- 目标：一键导出插件全部本地可导出数据（六类生活数据拆分文件、`settings.json` 注入设置、`active_persona.json`、`reconcile_v1_4_0.json` 标记、UI 状态），并可从 ZIP 校验后导入。
 - 不导出：Operit 原生 Memory 内容（宿主管理，插件不拷贝）；不创建第二套记忆数据库。
 - 设计遵循：不删除用户在 Operit 中手工创建的数据；导入以 `merge` 或 `overwrite` 两种模式运行；`overwrite` 前自动生成一次保护性备份。
 

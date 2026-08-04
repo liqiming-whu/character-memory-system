@@ -61,6 +61,10 @@ function Screen(ctx) {
   var injectionState = ctx.useState('injectionSettings', null);
   var injectionSavingState = ctx.useState('injectionSaving', false);
   var injectionLimitInputState = ctx.useState('injectionLimitInput', '');
+  // 数据备份
+  var backupBusyState = ctx.useState('backupBusy', false);
+  var backupResultState = ctx.useState('backupResult', '');
+  var backupModeState = ctx.useState('backupMode', 'merge');
   var screenPersonaState = ctx.useState('screenPersona', null);
   var screenCharMemoriesState = ctx.useState('screenCharMemories', []);
 var uiSaveRef = ctx.useRef('uiSaveRef', '');
@@ -415,6 +419,70 @@ loadingChatsState[1](false);
       resultState[1]('❌ ' + (e.message || String(e)));
     }
     injectionSavingState[1](false);
+  }
+
+  // ===== 数据备份 =====
+  async function doExportBackup() {
+    if (backupBusyState[0]) return;
+    backupBusyState[1](true);
+    backupResultState[1]('🔄 正在导出备份...');
+    try {
+      var raw = await ctx.callTool('memory_system:export_backup', { reason: 'manual' });
+      var r = parseResult(raw);
+      if (r && r.success) {
+        backupResultState[1]('✅ 备份已导出：' + (r.fileName || '') + '（' + (r.fileCount || 0) + ' 个文件）\n路径：' + (r.path || ''));
+      } else {
+        backupResultState[1]('❌ ' + ((r && r.message) || '导出失败'));
+      }
+    } catch (e) {
+      backupResultState[1]('❌ ' + (e.message || String(e)));
+    }
+    backupBusyState[1](false);
+  }
+
+  async function doPickAndRestore() {
+    if (backupBusyState[0]) return;
+    if (typeof ctx.openFilePicker !== 'function') {
+      backupResultState[1]('❌ 当前环境不支持文件选择');
+      return;
+    }
+    backupBusyState[1](true);
+    backupResultState[1]('🔄 选择备份文件...');
+    try {
+      var picked = await ctx.openFilePicker({ mimeTypes: ['application/zip', 'application/octet-stream'] });
+      if (picked && picked.cancelled) {
+        backupResultState[1]('已取消选择');
+        backupBusyState[1](false);
+        return;
+      }
+      var file = picked && picked.files && picked.files[0];
+      if (!file) {
+        backupResultState[1]('❌ 未选择文件');
+        backupBusyState[1](false);
+        return;
+      }
+      var filePath = file.path || file.uri || '';
+      backupResultState[1]('🔄 正在校验备份...');
+      var inspRaw = await ctx.callTool('memory_system:inspect_backup', { path: filePath });
+      var insp = parseResult(inspRaw);
+      if (!insp || !insp.success || insp.valid !== true) {
+        backupResultState[1]('❌ 备份校验失败：' + ((insp && insp.message) || '文件损坏或格式不正确'));
+        backupBusyState[1](false);
+        return;
+      }
+      backupResultState[1]('🔄 备份有效（' + (insp.fileCount || 0) + ' 个文件），正在恢复（' + (backupModeState[0] === 'overwrite' ? '覆盖' : '合并') + '模式）...');
+      var resRaw = await ctx.callTool('memory_system:restore_backup', { path: filePath, mode: backupModeState[0] });
+      var res = parseResult(resRaw);
+      if (res && res.success) {
+        backupResultState[1]('✅ 恢复完成（' + res.mode + ' 模式，' + (res.fileCount || 0) + ' 个文件）');
+        await loadData();
+      } else {
+        backupResultState[1]('❌ ' + ((res && res.message) || '恢复失败'));
+      }
+    } catch (e) {
+      backupResultState[1]('❌ ' + (e.message || String(e)));
+    }
+    backupBusyState[1](false);
   }
 
   async function doAnalyze() {
@@ -774,6 +842,45 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
             ]),
             UI.TextField({ value: injectionLimitInputState[0], onValueChange: onInjectionLimitChange, placeholder: (injectionState[0] && injectionState[0].maxMemories ? String(injectionState[0].maxMemories) : '5'), singleLine: true }),
           ]),
+        ]),
+      ]),
+      UI.Spacer({ height: 8 }),
+      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.surfaceContainerHigh, padding: 12, border: { width: 1, color: colors.outlineVariant } }, [
+        UI.Column({ spacing: 8 }, [
+          UI.Text({ text: '💾 数据备份', style: 'labelMedium', fontWeight: 'bold', color: colors.primary }),
+          UI.Text({ text: '备份六类生活数据、注入设置、角色上下文与对账标记；不备份 Operit 原生 Memory。', style: 'labelSmall', color: colors.onSurfaceVariant }),
+          UI.Row({ fillMaxWidth: true, spacing: 8 }, [
+            UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: doExportBackup }, [
+              UI.Row({ verticalAlignment: 'center' }, [
+                UI.Icon({ name: 'upload', tint: colors.onPrimary, size: 16 }),
+                UI.Spacer({ width: 4 }),
+                UI.Text({ text: '导出备份', style: 'labelSmall', color: colors.onPrimary, fontWeight: 'bold' }),
+              ]),
+            ]),
+            UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primaryContainer, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: doPickAndRestore }, [
+              UI.Row({ verticalAlignment: 'center' }, [
+                UI.Icon({ name: 'download', tint: colors.primary, size: 16 }),
+                UI.Spacer({ width: 4 }),
+                UI.Text({ text: '导入恢复', style: 'labelSmall', color: colors.primary, fontWeight: 'bold' }),
+              ]),
+            ]),
+          ]),
+          UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
+            UI.Text({ text: '恢复模式', style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
+            UI.Spacer({ width: 8 }),
+            UI.FilterChip({
+              label: UI.Text({ text: '合并（保留现有）', style: 'labelSmall', color: backupModeState[0] === 'merge' ? colors.primary : colors.onSurfaceVariant }),
+              selected: backupModeState[0] === 'merge',
+              onClick: function() { backupModeState[1]('merge'); }
+            }),
+            UI.Spacer({ width: 4 }),
+            UI.FilterChip({
+              label: UI.Text({ text: '覆盖', style: 'labelSmall', color: backupModeState[0] === 'overwrite' ? colors.primary : colors.onSurfaceVariant }),
+              selected: backupModeState[0] === 'overwrite',
+              onClick: function() { backupModeState[1]('overwrite'); }
+            }),
+          ]),
+          backupResultState[0] ? UI.Text({ text: backupResultState[0], style: 'labelSmall', color: colors.onSurfaceVariant, fontSize: 11 }) : null,
         ]),
       ]),
       UI.Spacer({ height: 8 }),

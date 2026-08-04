@@ -9,10 +9,10 @@
 - Operit 上游权威仓库：`https://github.com/AAswordman/Operit`
 - API 判断顺序：`D:\Operit\docs`、`D:\Operit\examples\types`、Operit 运行时源码、本项目 `docs/reference`
 - ToolPkg ID：`com.operit.character_memory_system`
-- 当前版本：`1.5.4`
-- v1.5.4 状态：代码已尝试修复并完成本地静态验证，实际效果尚未经过 Operit 实机测试。
-- 当前包：`dist/com-operit-character-memory-system-v1.5.4.toolpkg`
-- v1.5.4 SHA-256：`205623958996ef8a0ac833e552d86780c951c183e3d3a672d81aff0050aca5a9`
+- 当前版本：`1.5.5`
+- v1.5.5 状态：代码已尝试修复并完成本地静态验证，实际效果尚未经过 Operit 实机测试。
+- 当前包：`dist/com-operit-character-memory-system-v1.5.5.toolpkg`
+- v1.5.5 SHA-256：`30293a90fa5f1c75c2c13ea34fc9a1be3e9ecabaef39920232a2a4ededd54a7a`
 - 设备数据目录：`/sdcard/Download/Operit/character_memory_system_data`
 
 开始修改前必须阅读 `AGENTS.md`、`CODEX_DEVELOPMENT_INSTRUCTIONS.md`、`DEVELOPMENT_PLAN.md` 和 `docs/reference/`。不要假设工作区只含本次改动；先检查 `git status`，保留用户已有修改。
@@ -20,9 +20,10 @@
 ## 2. 当前架构
 
 - `main.js`：Hook 注册、角色上下文持久化、输入缓存、自动分析、记忆注入（官方附件方案）与输入菜单开关。
-- `packages/memory_system.js`：侧边栏工具、结构化数据读取、手动分析、Operit Memory CRUD、角色上下文读取、注入设置读写。
+- `packages/memory_system.js`：侧边栏工具、结构化数据读取、手动分析、Operit Memory CRUD、角色上下文读取、注入设置读写、备份导出（export_backup/inspect_backup/restore_backup）。
+- `packages/life_store.js`：六类生活数据结构化存储层。六类拆分为独立小文件（`events.json`/`contacts.json`/`info.json`/`todos.json`/`finance.json`/`menstrual.json`）+ 内存缓存 + 防抖写入 + 原子写（tmp→校验→move→bak）。旧版 `extracted.json` 首次读取时自动迁移拆分，原文件保留为 `extracted.json.bak`。
+- `packages/prompts.js`：共享 Prompt 构建器（buildExtractionPrompt/buildTopicCheckPrompt），main.js 与 memory_system.js 统一引用。
 - `ui/memory_system_ui/`：Compose DSL 侧边栏 UI；核心逻辑不得搬进 UI。
-- `extracted.json`：兼容旧版的六类结构化生活数据，不是独立通用记忆数据库。
 - Operit Memory：唯一长期记忆核心。角色隔离同时使用 `callerCardId` 和 `character_memory/personas/{personaId}`。
 - `last_input.json`：已废弃（v1.4.1 注入改用 `processedInput` 直接召回，不再依赖输入缓存）；如存在旧文件可忽略。
 - `settings.json`：记忆注入设置（`injection.enabled` / `injection.persist`），JSON 持久化，与数据一起可导出。

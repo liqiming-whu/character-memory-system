@@ -7,13 +7,17 @@ exports.registerToolPkg = registerToolPkg;
 var prompts_1 = require("./packages/prompts");
 var buildTopicCheckPrompt = prompts_1.buildTopicCheckPrompt;
 var buildExtractionPrompt = prompts_1.buildExtractionPrompt;
+var life_store = require("./packages/life_store");
+var readCategory = life_store.readCategory;
+var updateCategory = life_store.updateCategory;
+var loadAll = life_store.loadAll;
+var flush = life_store.flush;
 exports.onPromptInput = onPromptInput;
 exports.onInputMenuToggle = onInputMenuToggle;
 exports.onPromptFinalize = onPromptFinalize;
 
 var DATA_DIR = '/sdcard/Download/Operit/character_memory_system_data';
 var TRIGGER_FILE = DATA_DIR + '/trigger.json';
-var EXTRACTED_FILE = DATA_DIR + '/extracted.json';
 var PERSONA_FILE = DATA_DIR + '/active_persona.json';
 var SETTINGS_FILE = DATA_DIR + '/settings.json';
 var GLOBAL_MEMORY_FOLDER = 'character_memory/global';
@@ -31,7 +35,7 @@ function analysisWatermark(state, chatId) {
 }
 
 function ensureDir() {
-  try { Tools.Files.makeDirectory(DATA_DIR, true); } catch (e) {}
+  try { Tools.Files.mkdir(DATA_DIR, true); } catch (e) {}
 }
 
 function personaMemoryFolder(callerCardId) {
@@ -298,7 +302,7 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
     }
 
     // === 第二步：AI 摘要 + 结构化提取（完整调用） ===
-    var existingForPrompt = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+    var existingForPrompt = await loadAll();
     var extractRaw = await callAI(buildExtractionPrompt(dialogText, existingForPrompt, callerCardId ? personaName : ''), 0.3);
     if (!extractRaw) { await markAnalysisFailed(); return; }
 
@@ -318,49 +322,63 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
                         (extractData.menstrual && extractData.menstrual.length > 0);
 
     if (hasStructured) {
-      var current = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
-      if (!current.todos) current.todos = [];
-      if (!current.finance) current.finance = [];
       var isoNow = new Date().toISOString();
 
       if (extractData.events) {
-        current.events = dedupeLifeEntries(current.events.concat(extractData.events.map(function(e) { e.timestamp = e.timestamp || isoNow; return e; })), 'events');
+        await updateCategory('events', function(rows) {
+          var merged = dedupeLifeEntries(rows.concat(extractData.events.map(function(e) { e.timestamp = e.timestamp || isoNow; return e; })), 'events');
+          if (merged.length > 500) merged.splice(0, merged.length - 500);
+          return merged;
+        });
       }
       if (extractData.contacts) {
-        current.contacts = mergeContacts(current.contacts, extractData.contacts.map(function(c) { c.timestamp = c.timestamp || isoNow; return c; }));
+        await updateCategory('contacts', function(rows) {
+          var merged = mergeContacts(rows, extractData.contacts.map(function(c) { c.timestamp = c.timestamp || isoNow; return c; }));
+          if (merged.length > 500) merged.splice(0, merged.length - 500);
+          return merged;
+        });
       }
       if (extractData.info) {
-        current.info = dedupeLifeEntries(current.info.concat(extractData.info.map(function(i) { i.timestamp = i.timestamp || isoNow; return i; })), 'info');
+        await updateCategory('info', function(rows) {
+          var merged = dedupeLifeEntries(rows.concat(extractData.info.map(function(i) { i.timestamp = i.timestamp || isoNow; return i; })), 'info');
+          if (merged.length > 500) merged.splice(0, merged.length - 500);
+          return merged;
+        });
       }
       if (extractData.finance) {
-        current.finance = dedupeLifeEntries(current.finance.concat(extractData.finance.map(function(f) { f.timestamp = f.timestamp || isoNow; return f; })), 'finance');
+        await updateCategory('finance', function(rows) {
+          var merged = dedupeLifeEntries(rows.concat(extractData.finance.map(function(f) { f.timestamp = f.timestamp || isoNow; return f; })), 'finance');
+          if (merged.length > 500) merged.splice(0, merged.length - 500);
+          return merged;
+        });
       }
       if (extractData.todos) {
-        current.todos = dedupeLifeEntries(current.todos.concat(extractData.todos.map(function(t) {
-          t.timestamp = t.timestamp || isoNow;
-          if (t.completed === undefined) t.completed = false;
-          return t;
-        })), 'todos');
+        await updateCategory('todos', function(rows) {
+          var merged = dedupeLifeEntries(rows.concat(extractData.todos.map(function(t) {
+            t.timestamp = t.timestamp || isoNow;
+            if (t.completed === undefined) t.completed = false;
+            return t;
+          })), 'todos');
+          if (merged.length > 500) merged.splice(0, merged.length - 500);
+          return merged;
+        });
       }
       if (extractData.menstrual && extractData.menstrual.length > 0) {
-        if (!current.menstrual) current.menstrual = [];
-        current.menstrual = current.menstrual.concat(extractData.menstrual.filter(function(m) { return m.startDate; }).map(function(m) { m.timestamp = m.timestamp || isoNow; return m; }));
-        var menstrualSeen = {};
-        current.menstrual = current.menstrual.filter(function(m) {
-          if (menstrualSeen[m.startDate]) return false;
-          menstrualSeen[m.startDate] = true;
-          return true;
+        await updateCategory('menstrual', function(rows) {
+          var merged = rows.concat(extractData.menstrual.filter(function(m) { return m.startDate; }).map(function(m) { m.timestamp = m.timestamp || isoNow; return m; }));
+          var menstrualSeen = {};
+          merged = merged.filter(function(m) {
+            if (menstrualSeen[m.startDate]) return false;
+            menstrualSeen[m.startDate] = true;
+            return true;
+          });
+          merged.sort(function(a, b) { return a.startDate.localeCompare(b.startDate); });
+          return merged;
         });
-        current.menstrual.sort(function(a, b) { return a.startDate.localeCompare(b.startDate); });
       }
 
-      if (current.events.length > 500) current.events.splice(0, current.events.length - 500);
-      if (current.contacts.length > 500) current.contacts.splice(0, current.contacts.length - 500);
-      if (current.info.length > 500) current.info.splice(0, current.info.length - 500);
-      if (current.finance.length > 500) current.finance.splice(0, current.finance.length - 500);
-      if (current.todos.length > 500) current.todos.splice(0, current.todos.length - 500);
-
-      await writeJson(EXTRACTED_FILE, current);
+      // 同步落盘（分析完成的关键数据点）
+      await flush();
 
       // === extracted 条目直接入向量库（取代旧 memories.json 方案）===
       try {
@@ -501,7 +519,7 @@ function extractedRecallItems(data, userInput) {
     var itemLength = scored[si].item.title.length + scored[si].item.content.length;
     if (selected.length > 0 && usedChars + itemLength > 1800) continue;
     // 同一事件可能以 activity/schedule 等多条形式存在；按归一化标题去重，只注入一条
-    var normKey = normalizeIdentity(scored[si].item.title);
+    var normKey = normalizeIdentity(String(scored[si].item.title || '').replace(/\[cms:[a-z0-9]+\]/gi, '').replace(/\[cms[a-z0-9]+\]/gi, ''));
     if (selectedSeen[normKey]) continue;
     selectedSeen[normKey] = true;
     selected.push(scored[si].item);
@@ -607,7 +625,8 @@ async function collectInjectionMemories(userInput, currentPersona, chatId, maxMe
   } catch (e) {}
   var localItems = [];
   try {
-    var extractedData = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
+    // 注入本地召回：读拆分后的六类数据（走缓存，避免整文件读取）
+    var extractedData = await loadAll();
     localItems = extractedRecallItems(extractedData, userInput);
   } catch (e) {}
   return { nativeMemories: nativeMemories.slice(0, maxMemories), localItems: localItems };
@@ -633,11 +652,13 @@ async function buildInjectionAttachment(userInput, currentPersona, chatId, maxMe
     });
   });
   if (!entries.length) return '';
-  // 跨源去重：向量库标题带 [cms:xxx] 后缀（stableLifeTitle），extracted.json 用原始标题，
-  // 归一化后剥离 cms 后缀再按标题互斥，防止同一记忆从两个源各注入一条。
+  // 跨源去重：向量库标题带 [cms:xxx] 后缀（stableLifeTitle），extracted.json 用原始标题。
+  // 注意：先剥 cms 后缀再归一化——若先 normalizeIdentity 会把 `[cms:xxx]` 变成 `[cmsxxx]`，
+  // 后续正则匹配不到导致去重失效。
   var seenTitle = {};
   entries = entries.filter(function(e) {
-    var key = normalizeIdentity(e.title).replace(/\[cms:[a-z0-9]+\]/g, '');
+    var raw = String(e.title || '');
+    var key = normalizeIdentity(raw.replace(/\[cms:[a-z0-9]+\]/gi, '').replace(/\[cms[a-z0-9]+\]/gi, ''));
     if (seenTitle[key]) return false;
     seenTitle[key] = true;
     return true;

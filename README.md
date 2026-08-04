@@ -2,9 +2,9 @@
 
 Character Memory System 是基于 Operit ToolPkg 和原生 Memory API 的角色长期记忆扩展。项目在保留个人 AI 助手能力的基础上，为当前角色卡增加隔离的长期记忆、召回和 Prompt 注入。
 
-当前版本：`1.5.4`。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）；默认 Profile 全库召回、联系人属性召回、结构化相关度排序和历史数据对账均已尝试修复并通过本地静态检查，但实际效果尚未经过 Operit 实机测试。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件，导航为：概览 / 待办 / 时间线 / 知识 / 角色 / 设置（搜索并入知识页，搜索框按需展开）。
+当前版本：`1.5.5`。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）；默认 Profile 全库召回、联系人属性召回、结构化相关度排序和历史数据对账均已尝试修复并通过本地静态检查，但实际效果尚未经过 Operit 实机测试。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
 
-当前测试包：`dist/com-operit-character-memory-system-v1.5.4.toolpkg`。
+当前测试包：`dist/com-operit-character-memory-system-v1.5.5.toolpkg`。
 
 ToolPkg 唯一标识为 `com.operit.character_memory_system`。它不会以同 ID 覆盖原 `com.operit.memory_system`；为避免两个自动提取与 Prompt Hook 同时工作，测试和使用时请禁用原 Memory System。
 
