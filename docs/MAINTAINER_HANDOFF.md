@@ -9,10 +9,10 @@
 - Operit 上游权威仓库：`https://github.com/AAswordman/Operit`
 - API 判断顺序：`D:\Operit\docs`、`D:\Operit\examples\types`、Operit 运行时源码、本项目 `docs/reference`
 - ToolPkg ID：`com.operit.character_memory_system`
-- 当前版本：`1.5.2`
-- v1.5.2 状态：代码已尝试修复并完成本地静态验证，实际效果尚未经过 Operit 实机测试。
-- 当前包：`dist/com-operit-character-memory-system-v1.5.2.toolpkg`
-- v1.5.2 SHA-256：`34bea2765b0db9eab710f3be77e011efe8cc0ccbfb72d1134e005a0fed1f9b6c`
+- 当前版本：`1.5.4`
+- v1.5.4 状态：代码已尝试修复并完成本地静态验证，实际效果尚未经过 Operit 实机测试。
+- 当前包：`dist/com-operit-character-memory-system-v1.5.4.toolpkg`
+- v1.5.4 SHA-256：`205623958996ef8a0ac833e552d86780c951c183e3d3a672d81aff0050aca5a9`
 - 设备数据目录：`/sdcard/Download/Operit/character_memory_system_data`
 
 开始修改前必须阅读 `AGENTS.md`、`CODEX_DEVELOPMENT_INSTRUCTIONS.md`、`DEVELOPMENT_PLAN.md` 和 `docs/reference/`。不要假设工作区只含本次改动；先检查 `git status`，保留用户已有修改。
@@ -28,7 +28,7 @@
 - `settings.json`：记忆注入设置（`injection.enabled` / `injection.persist`），JSON 持久化，与数据一起可导出。
 - 记忆注入（官方 `com.operit.message_insert_bundle` 同款附件方案）：`persist=true` 走 `PromptInput/before_process`（随消息保存），`persist=false` 走 `PromptFinalize/before_send_to_model`（仅本次模型请求，不写回聊天记录）；已废弃 `SystemPromptCompose -> {systemPrompt}` 注入。
 
-## 3. v1.5.2 当前实现
+## 3. v1.5.4 当前实现
 
 - ToolPkg ID 与数据目录已从原插件隔离。
 - 支持生活六分类及 `character/relationship/preference/interaction_rule` 四类角色记忆。
@@ -44,7 +44,7 @@
 - 联系人召回和原生同步已包含 `attributes/context/contexts/relation`。
 - 新增 `reconcile_native_memory`；首次 `load_saved_data` 会尝试自动执行一次，成功后写入 `reconcile_v1_4_0.json`，失败不会写完成标记。
 - 新提取的六分类条目已复用幂等 upsert；稳定标题使用结构身份哈希，避免相同分类下的不同事实互相覆盖。
-- 上述 v1.5.2 项目均未经过实机验证，不能标记为实际修复完成。
+- 上述 v1.5.4 项目均未经过实机验证，不能标记为实际修复完成。
 
 ## 4. 已确认的 Operit 平台行为
 
@@ -83,7 +83,7 @@ v1.4.0 已改为完整查询、token 和 2-4 字片段的通用评分，并补�
 
 v1.5.2 将记忆注入从 `SystemPromptCompose -> {systemPrompt}` 重构为官方 `com.operit.message_insert_bundle` 同款附件方案：两阶段均返回「原消息 + 单个 XML 附件」，设置项含注入开关、注入内容随消息保存、每次注入记忆条数（1-20，默认 5，防抖保存）。需实机确认：persist 关闭时附件只进入本次模型请求而不写入聊天记录；persist 开启时随消息保存；重复发送/重试不叠加附件；同一会话通过快照 id 去重。
 
-## 6. v1.5.2 实机验证与后续处理顺序
+## 6. v1.5.4 实机验证与后续处理顺序
 
 完整状态和验收标准见 `DEVELOPMENT_PLAN.md` 的“v1.4.0 召回修复计划”。代码已经按以下顺序尝试实现，接手者应先验证而不是重新实现：
 
@@ -134,7 +134,7 @@ v1.5.2 将记忆注入从 `SystemPromptCompose -> {systemPrompt}` 重构为官�
 
 备注：概览页 ↔ App 切换基本不触发；角色页 ↔ App 切换高概率触发，且角色页作为触发源会连带影响全局。优先级低于功能正确性，暂缓。
 
-## 8. v1.5.2 必测场景
+## 8. v1.5.4 必测场景
 
 1. 默认 Operit Memory 文件夹中的用户习惯能够注入。
 2. `contacts.attributes` 中位于正文后部的习惯能够注入。
@@ -161,10 +161,10 @@ node --check ui/memory_system_ui/tabs/character.js
 
 ToolPkg 是标准 ZIP，包内至少应包含 `manifest.json`、`main.js`、`packages/` 和 `ui/`。打包后重新打开 ZIP，核对 Manifest 版本、入口和角色页文件，再计算 SHA-256。
 
-## 10. v1.5.2 交付物
+## 10. v1.5.4 交付物
 
 已打包并验证：
 
-- ToolPkg：`dist/com-operit-character-memory-system-v1.5.2.toolpkg`
-- SHA-256：`34bea2765b0db9eab710f3be77e011efe8cc0ccbfb72d1134e005a0fed1f9b6c`
-- 验证边界：仅本地语法、Manifest 和 ZIP 结构检查（15 个文件与源码逐文件 SHA 一致）；未进行 Operit 实机功能测试
+- ToolPkg：`dist/com-operit-character-memory-system-v1.5.4.toolpkg`
+- SHA-256：`205623958996ef8a0ac833e552d86780c951c183e3d3a672d81aff0050aca5a9`
+- 验证边界：仅本地语法、Manifest 和 ZIP 结构检查（17 个文件与源码逐文件 SHA 一致）；未进行 Operit 实机功能测试

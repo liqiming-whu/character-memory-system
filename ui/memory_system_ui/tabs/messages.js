@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 const shared = require("../shared");
 const { parseResult } = shared;
+const theme = require("../theme");
 
 // ===== Token 估算（简单字符数估算，中文约2字符/词）=====
 // 默认64k上下文，80%用于消息内容（留空间给prompt和响应）
@@ -11,7 +12,7 @@ var TOKEN_LIMIT_PER_ANALYSIS = Math.floor(64 * 1024 * 0.8); // ~51200 tokens
 function estimateTokens(text) {
   if (!text) return 0;
   // 简单估算：中文按2字符=1token，英文按4字符=1token
-  var chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+  var chineseChars = (text.match(/[一-龥]/g) || []).length;
   var otherChars = text.length - chineseChars;
   return Math.ceil(chineseChars / 2) + Math.ceil(otherChars / 4);
 }
@@ -24,8 +25,9 @@ function formatTokens(tokens) {
 // ===== Tab 5: 消息（无限加载模式）=====
 function render(ctx, allData, states, actions) {
   var UI = ctx.UI;
+  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
   var items = [];
-  
+
   // 状态
   var chatsState = states.chats || [];
   var selectedChatState = states.selectedChat || null;
@@ -34,7 +36,7 @@ function render(ctx, allData, states, actions) {
   var loadingDetailState = states.loadingDetail || false;
   var msgQuery = states.msgQuery || '';
   var selectedMessagesState = states.selectedMessages || []; // 多选的消息索引
-  
+
   // 无限加载专用状态（首次加载20条，后续每次加载20条）
   var hasMoreState = states.hasMore !== undefined ? states.hasMore : true;
   var offsetState = states.offset || 0;
@@ -42,7 +44,7 @@ function render(ctx, allData, states, actions) {
   // 后端真实对话总数（来自 list_chats_brief.data.totalCount）
   // 这是"实际拉取数量"——不会因为前端 [concat] 而变，是数据库里真实存在的对话数
   var totalChats = states.totalChats || 0;
-  
+
   // 搜索过滤（在已有列表上过滤）
   var filteredChats = chatsState;
   if (searchQuery) {
@@ -148,8 +150,8 @@ loadMoreRef.current = false;
     actions.setLoadingDetail(true);
     (async function() {
       try {
-        var raw = await ctx.callTool('chat_exporter:export_single_chat', { 
-          chat_id: selectedChatState.chatId, 
+        var raw = await ctx.callTool('chat_exporter:export_single_chat', {
+          chat_id: selectedChatState.chatId,
           max_messages: 200,
           include_meta: true,
           format: 'plain'
@@ -164,26 +166,26 @@ loadMoreRef.current = false;
   }
 
   // ===== 消息Tab内容 =====
-  
+
   // Token限制说明（顶部固定显示）
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#FFF3E0', padding: { left: 10, right: 10, top: 6, bottom: 6 } }, [
+  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.errorContainer, padding: { left: 10, right: 10, top: 6, bottom: 6 } }, [
     UI.Row({ verticalAlignment: 'center' }, [
-      UI.Icon({ name: 'info', tint: '#E65100', size: 14 }),
+      UI.Icon({ name: 'info', tint: colors.error, size: 14 }),
       UI.Spacer({ width: 6 }),
-      UI.Text({ text: '每批Token限制: ~' + formatTokens(TOKEN_LIMIT_PER_ANALYSIS) + ' (上下文64k×80%) | 超出自动分批', style: 'labelSmall', color: '#E65100' }),
+      UI.Text({ text: '每批Token限制: ~' + formatTokens(TOKEN_LIMIT_PER_ANALYSIS) + ' (上下文64k×80%) | 超出自动分批', style: 'labelSmall', color: colors.error }),
     ]),
   ]));
   items.push(UI.Spacer({ height: 8 }));
 
   // 搜索栏
-  items.push(UI.Surface({ shape: { cornerRadius: 10 }, containerColor: '#F5F5F5', padding: { left: 10, right: 10, top: 4, bottom: 4 }, fillMaxWidth: true }, [
+  items.push(UI.Surface({ shape: { cornerRadius: 10 }, containerColor: colors.surfaceVariant, padding: { left: 10, right: 10, top: 4, bottom: 4 }, fillMaxWidth: true }, [
     UI.Row({ verticalAlignment: 'center' }, [
-      UI.Icon({ name: 'search', tint: '#999999', size: 16 }),
+      UI.Icon({ name: 'search', tint: colors.outline, size: 16 }),
       UI.Spacer({ width: 6 }),
-      UI.TextField({ value: searchQuery, onValueChange: function(v) { 
-        actions.setMsgQuery(v); 
+      UI.TextField({ value: searchQuery, onValueChange: function(v) {
+        actions.setMsgQuery(v);
       }, placeholder: '搜索对话...', weight: 1, singleLine: true }),
-      searchQuery ? UI.Icon({ name: 'close', tint: '#999999', size: 16, onClick: function() { actions.setMsgQuery(''); } }) : null,
+      searchQuery ? UI.Icon({ name: 'close', tint: colors.outline, size: 16, onClick: function() { actions.setMsgQuery(''); } }) : null,
     ].filter(Boolean)),
   ]));
   items.push(UI.Spacer({ height: 8 }));
@@ -206,13 +208,13 @@ if (totalChats > 0) {
     ? '搜索到 ' + displayCount + ' 个对话'
     : '已加载 ' + displayCount + ' 个对话' + (hasMoreState ? '（下拉加载更多）' : '（已全部加载）');
 }
-items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#E0F7FA', padding: 14 }, [
+items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.tertiaryContainer, padding: 14 }, [
   UI.Row({ verticalAlignment: 'center' }, [
-    UI.Icon({ name: 'chat', tint: '#00838F', size: 28 }),
+    UI.Icon({ name: 'chat', tint: colors.tertiary, size: 28 }),
     UI.Spacer({ width: 10 }),
     UI.Column({}, [
-      UI.Text({ text: '消息记录', style: 'titleMedium', fontWeight: 'bold', color: '#00838F' }),
-      UI.Text({ text: statusText, style: 'bodySmall', color: '#666666' }),
+      UI.Text({ text: '消息记录', style: 'titleMedium', fontWeight: 'bold', color: colors.tertiary }),
+      UI.Text({ text: statusText, style: 'bodySmall', color: colors.onSurfaceVariant }),
     ]),
   ]),
 ]));
@@ -221,7 +223,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
   // 加载中（初始加载）
   if (loadingChatsState && chatsState.length === 0) {
     items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 32 }, [
-      UI.Text({ text: '⏳ 加载中...', style: 'bodyMedium', color: '#999999' }),
+      UI.Text({ text: '⏳ 加载中...', style: 'bodyMedium', color: colors.outline }),
     ]));
     return items;
   }
@@ -229,7 +231,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
   // ===== 对话详情面板 =====
   if (selectedChatState) {
     var chat = selectedChatState;
-    
+
     // 定义分析函数
     var analyzeChat = function() {
       var targetChatId = chat.chatId;
@@ -252,17 +254,17 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         _asyncAnalyze();
       })();
     };
-    
+
     // 返回按钮
-    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#00838F', padding: 10, onClick: function() {
+    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.tertiary, padding: 10, onClick: function() {
       actions.setSelectedChat(null);
       actions.setChatDetail(null);
       actions.setSelectedMessages([]);
     }}, [
       UI.Row({ verticalAlignment: 'center' }, [
-        UI.Icon({ name: 'arrow_back', tint: '#FFFFFF', size: 18 }),
+        UI.Icon({ name: 'arrow_back', tint: colors.onPrimary, size: 18 }),
         UI.Spacer({ width: 8 }),
-        UI.Text({ text: '返回对话列表', style: 'labelMedium', color: '#FFFFFF' }),
+        UI.Text({ text: '返回对话列表', style: 'labelMedium', color: colors.onPrimary }),
       ]),
     ]));
     items.push(UI.Spacer({ height: 8 }));
@@ -274,27 +276,27 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         chatTokens += estimateTokens(chatDetailState.messages[ti].content);
       }
     }
-    
-    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#E0F7FA', padding: 12 }, [
+
+    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.tertiaryContainer, padding: 12 }, [
       UI.Column({}, [
         UI.Row({ verticalAlignment: 'center', fillMaxWidth: true }, [
           UI.Column({ weight: 1 }, [
-            UI.Text({ text: chat.title || '未命名对话', style: 'titleSmall', fontWeight: 'bold', color: '#00838F' }),
+            UI.Text({ text: chat.title || '未命名对话', style: 'titleSmall', fontWeight: 'bold', color: colors.tertiary }),
             UI.Row({}, [
-              UI.Text({ text: (chat.messageCount || 0) + ' 条消息', style: 'labelSmall', color: '#666666' }),
+              UI.Text({ text: (chat.messageCount || 0) + ' 条消息', style: 'labelSmall', color: colors.onSurfaceVariant }),
               UI.Spacer({ width: 8 }),
-              UI.Surface({ shape: { cornerRadius: 4 }, containerColor: '#E3F2FD', padding: { left: 6, right: 6, top: 2, bottom: 2 } }, [
-                UI.Text({ text: 'Token: ' + formatTokens(chatTokens), style: 'labelSmall', color: '#1565C0', fontSize: 10 }),
+              UI.Surface({ shape: { cornerRadius: 4 }, containerColor: colors.primaryContainer, padding: { left: 6, right: 6, top: 2, bottom: 2 } }, [
+                UI.Text({ text: 'Token: ' + formatTokens(chatTokens), style: 'labelSmall', color: colors.primary, fontSize: 10 }),
               ]),
             ]),
-            chat.createdAt ? UI.Text({ text: '创建: ' + new Date(chat.createdAt).toLocaleDateString('zh-CN'), style: 'labelSmall', color: '#999999', fontSize: 10 }) : null,
+            chat.createdAt ? UI.Text({ text: '创建: ' + new Date(chat.createdAt).toLocaleDateString('zh-CN'), style: 'labelSmall', color: colors.outline, fontSize: 10 }) : null,
           ]),
           // 分析按钮
-          UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#FF9800', padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: analyzeChat }, [
+          UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.error, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: analyzeChat }, [
             UI.Row({ verticalAlignment: 'center' }, [
-              UI.Icon({ name: 'analytics', tint: '#FFFFFF', size: 16 }),
+              UI.Icon({ name: 'analytics', tint: colors.onPrimary, size: 16 }),
               UI.Spacer({ width: 4 }),
-              UI.Text({ text: '分析', style: 'labelSmall', color: '#FFFFFF', fontWeight: 'bold' }),
+              UI.Text({ text: '分析', style: 'labelSmall', color: colors.onPrimary, fontWeight: 'bold' }),
             ]),
           ]),
         ]),
@@ -305,18 +307,18 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
     // 加载详情中
     if (loadingDetailState) {
       items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 24 }, [
-        UI.Text({ text: '⏳ 加载消息中...', style: 'bodyMedium', color: '#999999' }),
+        UI.Text({ text: '⏳ 加载消息中...', style: 'bodyMedium', color: colors.outline }),
       ]));
     } else if (chatDetailState && chatDetailState.messages) {
       var messages = chatDetailState.messages || [];
-      
+
       // 消息统计
       var userCount = 0, aiCount = 0;
       for (var mi = 0; mi < messages.length; mi++) {
         if (messages[mi].sender === 'user' || messages[mi].roleName === 'user') userCount++;
         else aiCount++;
       }
-      
+
       // 批量操作栏（当有选中消息时显示）
   if (selectedMessagesState.length > 0) {
     var selectedCount = selectedMessagesState.length;
@@ -337,7 +339,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         if (actions.setLoading) actions.setLoading(false);
         return;
       }
-      ctx.callTool('memory_system:analyze_saved_messages', { 
+      ctx.callTool('memory_system:analyze_saved_messages', {
         chat_id: chat.chatId,
         message_indices: JSON.stringify(selectedMessagesState)
       }).then(function(raw) {
@@ -353,35 +355,35 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         if (actions.setLoading) actions.setLoading(false);
       });
     };
-    
-    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#E8F5E9', padding: { left: 10, right: 10, top: 8, bottom: 8 } }, [
+
+    items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.primaryContainer, padding: { left: 10, right: 10, top: 8, bottom: 8 } }, [
       UI.Row({ verticalAlignment: 'center', fillMaxWidth: true }, [
-        UI.Text({ text: '已选 ' + selectedCount + ' 条消息', style: 'labelSmall', color: '#2E7D32', fontWeight: 'bold' }),
+        UI.Text({ text: '已选 ' + selectedCount + ' 条消息', style: 'labelSmall', color: colors.primary, fontWeight: 'bold' }),
         UI.Spacer({ weight: 1 }),
-        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#F44336', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() {
+        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.error, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() {
           actions.setSelectedMessages([]);
         }}, [
-          UI.Text({ text: '取消选择', style: 'labelSmall', color: '#FFFFFF' }),
+          UI.Text({ text: '取消选择', style: 'labelSmall', color: colors.onPrimary }),
         ]),
         UI.Spacer({ width: 8 }),
-        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#FF9800', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: batchAnalyzeSelected }, [
-          UI.Text({ text: '分析选中', style: 'labelSmall', color: '#FFFFFF', fontWeight: 'bold' }),
+        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.error, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: batchAnalyzeSelected }, [
+          UI.Text({ text: '分析选中', style: 'labelSmall', color: colors.onPrimary, fontWeight: 'bold' }),
         ]),
       ]),
     ]));
     items.push(UI.Spacer({ height: 8 }));
   }
-      
+
       items.push(UI.Row({ fillMaxWidth: true, spacing: 8 }, [
-        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#E3F2FD', padding: { left: 10, right: 10, top: 4, bottom: 4 } }, [
-          UI.Text({ text: '用户: ' + userCount, style: 'labelSmall', color: '#1565C0' }),
+        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primaryContainer, padding: { left: 10, right: 10, top: 4, bottom: 4 } }, [
+          UI.Text({ text: '用户: ' + userCount, style: 'labelSmall', color: colors.primary }),
         ]),
-        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#E8F5E9', padding: { left: 10, right: 10, top: 4, bottom: 4 } }, [
-          UI.Text({ text: 'AI: ' + aiCount, style: 'labelSmall', color: '#2E7D32' }),
+        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.tertiaryContainer, padding: { left: 10, right: 10, top: 4, bottom: 4 } }, [
+          UI.Text({ text: 'AI: ' + aiCount, style: 'labelSmall', color: colors.tertiary }),
         ]),
         UI.Spacer({ weight: 1 }),
         // 全选/取消全选
-        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#ECEFF1', padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() {
+        UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.surfaceVariant, padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() {
           if (selectedMessagesState.length === messages.length) {
             actions.setSelectedMessages([]);
           } else {
@@ -390,7 +392,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
             actions.setSelectedMessages(allIdx);
           }
         }}, [
-          UI.Text({ text: selectedMessagesState.length === messages.length && messages.length > 0 ? '取消全选' : '全选', style: 'labelSmall', color: '#546E7A' }),
+          UI.Text({ text: selectedMessagesState.length === messages.length && messages.length > 0 ? '取消全选' : '全选', style: 'labelSmall', color: colors.onSurfaceVariant }),
         ]),
       ]));
       items.push(UI.Spacer({ height: 8 }));
@@ -400,13 +402,13 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         (function(msg, idx) {
           var isUser = msg.sender === 'user' || msg.roleName === 'user';
           var isSelected = selectedMessagesState.indexOf(idx) >= 0;
-          var bgColor = isSelected ? '#C8E6C9' : (isUser ? '#E3F2FD' : '#F5F5F5');
+          var bgColor = isSelected ? colors.primaryContainer : (isUser ? colors.primaryContainer : colors.surfaceVariant);
           var align = isUser ? 'start' : 'end';
           var senderName = isUser ? '用户' : 'AI';
-          var senderColor = isUser ? '#1565C0' : '#2E7D32';
+          var senderColor = isUser ? colors.primary : colors.tertiary;
           var timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
           var msgTokens = estimateTokens(msg.content);
-          
+
           items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: bgColor, padding: 10, onClick: function() {
             // 切换选中状态
             var newSelected = selectedMessagesState.slice();
@@ -420,7 +422,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
           }}, [
             UI.Row({ verticalAlignment: 'center', fillMaxWidth: true }, [
               // Checkbox
-              UI.Surface({ width: 22, height: 22, shape: { cornerRadius: 4 }, containerColor: isSelected ? '#4CAF50' : '#FFFFFF', borderWidth: isSelected ? 0 : 1, borderColor: '#BDBDBD', onClick: function() {
+              UI.Surface({ width: 22, height: 22, shape: { cornerRadius: 4 }, containerColor: isSelected ? colors.primary : colors.surface, borderWidth: isSelected ? 0 : 1, borderColor: colors.outlineVariant, onClick: function() {
                 var newSelected = selectedMessagesState.slice();
                 var existIdx = newSelected.indexOf(idx);
                 if (existIdx >= 0) {
@@ -430,32 +432,32 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
                 }
                 actions.setSelectedMessages(newSelected);
               }}, [
-                isSelected ? UI.Icon({ name: 'check', tint: '#FFFFFF', size: 14 }) : null,
+                isSelected ? UI.Icon({ name: 'check', tint: colors.onPrimary, size: 14 }) : null,
               ].filter(Boolean)),
               UI.Spacer({ width: 8 }),
               // 消息内容
               UI.Column({ weight: 1, horizontalAlignment: align }, [
                 UI.Row({ verticalAlignment: 'center' }, [
                   UI.Text({ text: senderName, style: 'labelSmall', fontWeight: 'bold', color: senderColor }),
-                  timeStr ? UI.Text({ text: ' ' + timeStr, style: 'labelSmall', color: '#999999', fontSize: 9 }) : null,
+                  timeStr ? UI.Text({ text: ' ' + timeStr, style: 'labelSmall', color: colors.outline, fontSize: 9 }) : null,
                 ]),
                 UI.Spacer({ height: 4 }),
-                UI.Text({ text: msg.content || '', style: 'bodySmall', color: '#333333', maxLines: 10 }),
+                UI.Text({ text: msg.content || '', style: 'bodySmall', color: colors.onSurface, maxLines: 10 }),
               ].filter(Boolean)),
               UI.Spacer({ width: 8 }),
               // Token + 分析按钮
               UI.Column({ horizontalAlignment: 'end' }, [
-                UI.Surface({ shape: { cornerRadius: 4 }, containerColor: '#ECEFF1', padding: { left: 6, right: 6, top: 2, bottom: 2 } }, [
-                  UI.Text({ text: formatTokens(msgTokens) + ' token', style: 'labelSmall', color: '#546E7A', fontSize: 9 }),
+                UI.Surface({ shape: { cornerRadius: 4 }, containerColor: colors.surfaceVariant, padding: { left: 6, right: 6, top: 2, bottom: 2 } }, [
+                  UI.Text({ text: formatTokens(msgTokens) + ' token', style: 'labelSmall', color: colors.onSurfaceVariant, fontSize: 9 }),
                 ]),
                 UI.Spacer({ height: 4 }),
-                UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#FF9800', padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() {
+                UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.error, padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() {
                   var targetChatId = chat.chatId;
                   var targetIdx = idx;
                   if (actions.setLoading) actions.setLoading(true);
-                  ctx.callTool('memory_system:analyze_saved_messages', { 
+                  ctx.callTool('memory_system:analyze_saved_messages', {
                     chat_id: targetChatId,
-                    message_index: targetIdx 
+                    message_index: targetIdx
                   }).then(function(raw) {
                     var r = parseResult(raw);
                     if (r && r.success) {
@@ -469,7 +471,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
                     if (actions.setLoading) actions.setLoading(false);
                   });
                 }}, [
-                  UI.Text({ text: '分析', style: 'labelSmall', color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }),
+                  UI.Text({ text: '分析', style: 'labelSmall', color: colors.onPrimary, fontWeight: 'bold', fontSize: 10 }),
                 ]),
               ]),
             ]),
@@ -478,7 +480,7 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
         })(messages[vi], vi);
       }
     }
-    
+
     items.push(UI.Spacer({ height: 8 }));
   }
 
@@ -486,12 +488,12 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
   if (!selectedChatState) {
     // 获取已分析对话列表
     var analyzedChats = states.analyzedChats || [];
-    
+
     if (filteredChats.length === 0) {
       items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 32 }, [
-        UI.Icon({ name: 'chat_bubble_outline', tint: '#CCCCCC', size: 40 }),
+        UI.Icon({ name: 'chat_bubble_outline', tint: colors.outlineVariant, size: 40 }),
         UI.Spacer({ height: 12 }),
-        UI.Text({ text: searchQuery ? '没有找到匹配的对话' : '暂无对话记录', style: 'bodyMedium', color: '#999999' }),
+        UI.Text({ text: searchQuery ? '没有找到匹配的对话' : '暂无对话记录', style: 'bodyMedium', color: colors.outline }),
       ]));
     } else {
       for (var ci = 0; ci < filteredChats.length; ci++) {
@@ -499,35 +501,35 @@ items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, contain
           var title = chat.title || '未命名对话';
           var timeStr = chat.updatedAt ? new Date(chat.updatedAt).toLocaleDateString('zh-CN') : '';
           var isAnalyzed = analyzedChats.includes(chat.chatId);
-          
-          items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: isAnalyzed ? '#E8F5E9' : 'surfaceVariant', padding: 12, onClick: function() {
+
+          items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: isAnalyzed ? colors.primaryContainer : colors.surfaceVariant, padding: 12, onClick: function() {
             actions.setSelectedChat(chat);
             actions.setChatDetail(null);
             actions.setSelectedMessages([]);
           }}, [
             UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
-              UI.Surface({ width: 44, height: 44, shape: { cornerRadius: 22 }, containerColor: isAnalyzed ? '#4CAF50' : '#00838F' }, [
+              UI.Surface({ width: 44, height: 44, shape: { cornerRadius: 22 }, containerColor: isAnalyzed ? colors.primary : colors.tertiary }, [
                 UI.Row({ fillMaxWidth: true, height: 44, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
-                  UI.Icon({ name: isAnalyzed ? 'check_circle' : 'chat', tint: '#FFFFFF', size: 20 }),
+                  UI.Icon({ name: isAnalyzed ? 'check_circle' : 'chat', tint: colors.onPrimary, size: 20 }),
                 ]),
               ]),
               UI.Spacer({ width: 12 }),
               UI.Column({ weight: 1 }, [
                 UI.Row({ verticalAlignment: 'center' }, [
-                  UI.Text({ text: title, style: 'bodySmall', fontWeight: 'bold', color: '#333333', maxLines: 1 }),
+                  UI.Text({ text: title, style: 'bodySmall', fontWeight: 'bold', color: colors.onSurface, maxLines: 1 }),
                   isAnalyzed ? UI.Spacer({ width: 6 }) : null,
-                  isAnalyzed ? UI.Text({ text: '✓ 已分析', style: 'labelSmall', color: '#4CAF50', fontSize: 9 }) : null,
+                  isAnalyzed ? UI.Text({ text: '✓ 已分析', style: 'labelSmall', color: colors.primary, fontSize: 9 }) : null,
                 ]),
                 UI.Row({}, [
-                  UI.Text({ text: (chat.messageCount || 0) + ' 条消息', style: 'labelSmall', color: '#999999', fontSize: 10 }),
-                  timeStr ? UI.Text({ text: ' · ' + timeStr, style: 'labelSmall', color: '#BBBBBB', fontSize: 10 }) : null,
+                  UI.Text({ text: (chat.messageCount || 0) + ' 条消息', style: 'labelSmall', color: colors.outline, fontSize: 10 }),
+                  timeStr ? UI.Text({ text: ' · ' + timeStr, style: 'labelSmall', color: colors.outlineVariant, fontSize: 10 }) : null,
                 ]),
               ]),
-              UI.Icon({ name: 'chevron_right', tint: '#999999', size: 18 }),
+              UI.Icon({ name: 'chevron_right', tint: colors.outline, size: 18 }),
             ]),
           ]));
           items.push(UI.Spacer({ height: 4 }));
-          
+
           // 检测是否滚动到底部，触发加载更多
 // 注意：必须等 hasMoreState 反映的是"还剩更多"才触发。
 // 修复要点：用闭包的 chatsState 长度作为基准，避免 screen 刷新+loadMore 同时发生时重复触发。
@@ -540,15 +542,15 @@ handleLoadMore();
 }
         })(filteredChats[ci], ci);
       }
-      
+
       // 加载更多指示器
       if (loadingChatsState && chatsState.length > 0) {
         items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 16 }, [
-          UI.Text({ text: '⏳ 加载更多...', style: 'bodySmall', color: '#999999' }),
+          UI.Text({ text: '⏳ 加载更多...', style: 'bodySmall', color: colors.outline }),
         ]));
       } else if (!hasMoreState && chatsState.length > 0) {
         items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 16 }, [
-          UI.Text({ text: '—— 已加载全部 ' + chatsState.length + ' 个对话 ——', style: 'labelSmall', color: '#BBBBBB' }),
+          UI.Text({ text: '—— 已加载全部 ' + chatsState.length + ' 个对话 ——', style: 'labelSmall', color: colors.outlineVariant }),
         ]));
       }
     }

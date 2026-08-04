@@ -127,6 +127,9 @@ METADATA
     ]
 }
 */
+const prompts = require("./prompts");
+var buildExtractionPrompt = prompts.buildExtractionPrompt;
+var buildTopicCheckPrompt = prompts.buildTopicCheckPrompt;
 var DATA_DIR = '/sdcard/Download/Operit/character_memory_system_data';
 var EXTRACTED_FILE = DATA_DIR + '/extracted.json';
 var PERSONA_FILE = DATA_DIR + '/active_persona.json';
@@ -420,12 +423,7 @@ async function analyzeMessagesBatch(messages, startIdx, batchSize, endpoint, api
 
     if (!text || text.length < 10) return null;
 
-    var prompt = '你是一个记忆系统。请理解以下对话整体讲了什么，然后提取有价值的信息。\n\n核心原则：\n- 你是在理解一段对话后做总结，不是逐条扫描消息\n- 一段对话可能只产生0-2条有价值的提取，这是正常的\n- 过程噪音（反复调试、重复提问、工具调用细节）不要提取\n- 无效信息（"继续""好的""开始"等）完全忽略\n- 如果与已有数据语义重复，不要重复提取\n' + existingSummary + '\n返回纯JSON（不要markdown代码块，不要任何额外文字）：\n{"summary":"对话核心内容的精炼总结（保留有价值的信息、决策、结论。如果对话没有保留价值，留空字符串）","events":[{"type":"activity|schedule|observation|milestone|mood","title":"标题","description":"描述","importance":"high|medium|low","date":"YYYY-MM-DD","time":"HH:MM"}],"todos":[{"title":"待办事项","description":"描述","priority":"high|medium|low","dueDate":"YYYY-MM-DD或null","completed":false}],"contacts":[{"name":"姓名","relation":"friend|family|colleague|classmate|service|other","attributes":[{"key":"属性名","value":"值"}],"context":"提到这个人的场景"}],"info":[{"category":"类别","content":"内容"}],"finance":[{"type":"expense|income","category":"类别","amount":0,"description":"描述","date":"YYYY-MM-DD"}],"menstrual":[{"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD或null","symptoms":"症状描述"}],"character":[{"title":"标题","content":"角色身份或背景事实"}],"relationship":[{"title":"标题","content":"用户与角色的明确关系事实或共同经历"}],"preference":[{"title":"标题","content":"用户或角色明确表达的偏好"}],"interaction_rule":[{"title":"标题","content":"明确约定的称呼、回复风格或互动边界"}]}\n\n提取规则：\n1. events：有记录价值的事件。activity=做了什么事；schedule=有时间安排的事；observation=发现的现象；milestone=阶段性变化；mood=情绪\n2. todos：用户明确要做的事（"记得""要去""得买"等），不是已经做完的事\n3. contacts：提到的人物及其属性（生日/手机/喜好等）\n4. info：值得记住的知识/事实/参数（路径、密码提示、知识点等）\n5. finance：涉及花钱或收钱的记录\n6. menstrual：用户提到的经期记录，包括开始和结束日期及伴随症状\n7. character/relationship/preference/interaction_rule：仅在存在当前角色卡且事实明确时提取，否则返回空数组\n8. 某类没数据用空数组\n9. 同一件事不要拆成多条——"侧边栏一直转圈，反复调试"是1个事件不是6个\n\n对话内容：\n' + text;
-    prompt += '\n\n分类补充：用户明确表达的稳定习惯、作息和长期个人事实优先归入 info，category 使用“用户习惯”或准确的事实类别，不要只塞进 contacts.attributes。';
-
-    if (personaName) {
-        prompt += '\n\n当前角色卡：' + personaName + '。角色四类只提取对当前角色长期互动有价值且由对话明确支持的内容。';
-    }
+    var prompt = buildExtractionPrompt(text, existingSummary, personaName);
 
     var response = await Tools.Net.http({
         url: endpoint,

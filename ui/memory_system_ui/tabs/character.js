@@ -3,16 +3,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 const shared = require("../shared");
 const { parseResult } = shared;
+const theme = require("../theme");
 
 const CATEGORIES = [
-  { id: 'character', label: '角色信息', color: '#5E35B1' },
-  { id: 'relationship', label: '关系记忆', color: '#E91E63' },
-  { id: 'preference', label: '偏好', color: '#00897B' },
-  { id: 'interaction_rule', label: '互动规则', color: '#F57C00' },
+  { id: 'character', label: '角色信息' },
+  { id: 'relationship', label: '关系记忆' },
+  { id: 'preference', label: '偏好' },
+  { id: 'interaction_rule', label: '互动规则' },
 ];
 
 function render(ctx, personaFromScreen, memoriesFromScreen) {
   var UI = ctx.UI;
+  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
+  // 分类 chip 用 primary/tertiary 交替强调
+  var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary];
   var personaState = ctx.useState('character_persona_context', {
     id: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID') || ''),
     name: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME') || ''),
@@ -158,69 +162,68 @@ function render(ctx, personaFromScreen, memoriesFromScreen) {
   loadOnEnter();
 
   if (!personaId) {
-    return [UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#FFF3E0', padding: 18 }, [
+    return [UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.errorContainer, padding: 18 }, [
       UI.Column({ horizontalAlignment: 'center' }, [
-        UI.Icon({ name: 'person_off', tint: '#F57C00', size: 36 }),
+        UI.Icon({ name: 'person_off', tint: colors.error, size: 36 }),
         UI.Spacer({ height: 8 }),
-        UI.Text({ text: personaType === 'character_group' ? '首版暂不支持角色组记忆' : '当前未识别到角色卡', style: 'titleMedium', color: '#E65100', fontWeight: 'bold' }),
-        UI.Text({ text: '请在启用角色卡的对话中发送一条消息后再打开此页面。', style: 'bodySmall', color: '#777777' }),
+        UI.Text({ text: personaType === 'character_group' ? '首版暂不支持角色组记忆' : '当前未识别到角色卡', style: 'titleMedium', color: colors.error, fontWeight: 'bold' }),
+        UI.Text({ text: '请在启用角色卡的对话中发送一条消息后再打开此页面。', style: 'bodySmall', color: colors.onSurfaceVariant }),
         UI.Spacer({ height: 8 }),
-        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#F57C00', padding: { left: 12, right: 12, top: 7, bottom: 7 }, onClick: loadContext }, [
-          UI.Text({ text: '重新识别角色卡', style: 'labelMedium', color: '#FFFFFF', fontWeight: 'bold' }),
-        ]),
+        UI.Button({ text: '重新识别角色卡', onClick: loadContext }),
       ]),
     ])];
   }
 
   var items = [
-    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#EDE7F6', padding: 12 }, [
+    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.primaryContainer, padding: 12 }, [
       UI.Row({ verticalAlignment: 'center' }, [
-        UI.Icon({ name: 'person', tint: '#5E35B1', size: 28 }),
+        UI.Icon({ name: 'person', tint: colors.primary, size: 28 }),
         UI.Spacer({ width: 8 }),
         UI.Column({ weight: 1 }, [
-          UI.Text({ text: personaName || '未命名角色', style: 'titleMedium', color: '#4527A0', fontWeight: 'bold' }),
-          UI.Text({ text: '角色卡 ID：' + personaId, style: 'labelSmall', color: '#777777', maxLines: 1 }),
-          UI.Text({ text: '原生 Memory Profile · ' + memoriesState[0].length + ' 条', style: 'labelSmall', color: '#5E35B1' }),
+          UI.Text({ text: personaName || '未命名角色', style: 'titleMedium', color: colors.primary, fontWeight: 'bold' }),
+          UI.Text({ text: '角色卡 ID：' + personaId, style: 'labelSmall', color: colors.onSurfaceVariant, maxLines: 1 }),
+          UI.Text({ text: '原生 Memory Profile · ' + memoriesState[0].length + ' 条', style: 'labelSmall', color: colors.primary }),
         ]),
-        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#5E35B1', padding: 6, onClick: loadMemories }, [
-          UI.Icon({ name: 'refresh', tint: '#FFFFFF', size: 18 }),
+        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: 6, onClick: loadMemories }, [
+          UI.Icon({ name: 'refresh', tint: colors.onPrimary, size: 18 }),
         ]),
       ]),
     ]),
     UI.Spacer({ height: 8 }),
-    UI.Text({ text: '新增角色记忆', style: 'labelMedium', color: '#333333', fontWeight: 'bold' }),
+    UI.Text({ text: '新增角色记忆', style: 'labelMedium', color: colors.onSurface, fontWeight: 'bold' }),
   ];
 
   var chips = [];
   for (var ci = 0; ci < CATEGORIES.length; ci++) {
-    (function(category) {
+    (function(category, idx) {
       var selected = categoryState[0] === category.id;
-      chips.push(UI.Surface({ shape: { cornerRadius: 10 }, containerColor: selected ? category.color : '#F5F5F5', padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() { categoryState[1](category.id); } }, [
-        UI.Text({ text: category.label, style: 'labelSmall', color: selected ? '#FFFFFF' : '#666666' }),
-      ]));
-    })(CATEGORIES[ci]);
+      var color = catColors[idx % catColors.length];
+      chips.push(UI.FilterChip({
+        label: UI.Text({ text: category.label, style: 'labelSmall', color: selected ? colors.primary : colors.onSurfaceVariant }),
+        selected: selected,
+        onClick: function() { categoryState[1](category.id); }
+      }));
+    })(CATEGORIES[ci], ci);
   }
   items.push(UI.Row({ fillMaxWidth: true, spacing: 4 }, chips));
   items.push(UI.TextField({ value: titleState[0], onValueChange: titleState[1], placeholder: '标题', singleLine: true }));
   items.push(UI.TextField({ value: contentState[0], onValueChange: contentState[1], placeholder: '明确、可复用的长期记忆' }));
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#5E35B1', padding: 8, onClick: createMemory }, [
-    UI.Text({ text: '保存到当前角色', style: 'labelMedium', color: '#FFFFFF', fontWeight: 'bold' }),
-  ]));
-  if (resultState[0]) items.push(UI.Text({ text: resultState[0], style: 'labelSmall', color: '#555555' }));
+  items.push(UI.Button({ text: '保存到当前角色', onClick: createMemory, fillMaxWidth: true }));
+  if (resultState[0]) items.push(UI.Text({ text: resultState[0], style: 'labelSmall', color: colors.onSurfaceVariant }));
   items.push(UI.Spacer({ height: 8 }));
-  items.push(UI.Text({ text: loadingState[0] ? '正在读取…' : '角色记忆', style: 'labelMedium', color: '#333333', fontWeight: 'bold' }));
+  items.push(UI.Text({ text: loadingState[0] ? '正在读取…' : '角色记忆', style: 'labelMedium', color: colors.onSurface, fontWeight: 'bold' }));
 
   for (var mi = 0; mi < memoriesState[0].length; mi++) {
     (function(memory) {
       var displayTitle = String(memory.title || '未命名记忆').replace(/^\[persona:[^\]]+\]\s*/, '');
-      items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#FAFAFA', padding: 10 }, [
+      items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.surface, padding: 10 }, [
         UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
           UI.Column({ weight: 1 }, [
-            UI.Text({ text: displayTitle, style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
-            UI.Text({ text: memory.content || '', style: 'labelSmall', color: '#777777', maxLines: 3 }),
+            UI.Text({ text: displayTitle, style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
+            UI.Text({ text: memory.content || '', style: 'labelSmall', color: colors.onSurfaceVariant, maxLines: 3 }),
           ]),
-          UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#FFEBEE', padding: 5, onClick: function() { deleteMemory(memory.title); } }, [
-            UI.Icon({ name: 'delete', tint: '#D32F2F', size: 16 }),
+          UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.errorContainer, padding: 5, onClick: function() { deleteMemory(memory.title); } }, [
+            UI.Icon({ name: 'delete', tint: colors.error, size: 16 }),
           ]),
         ]),
       ]));

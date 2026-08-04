@@ -3,10 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 const shared = require("../shared");
 const { getTypeColor, getTypeIcon, inDateRange, multiMatch, pad2 } = shared;
+const theme = require("../theme");
 
 // ===== Tab 2: 时间线 =====
 function render(ctx, allData, states, actions) {
   var UI = ctx.UI;
+  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
   var items = [];
   var allEvents = allData.events || [];
   var allFinance = allData.finance || [];
@@ -42,7 +44,7 @@ function render(ctx, allData, states, actions) {
   // 生成删除按钮
   function makeDeleteBtn(category, index, key) {
     var isPending = states.pendingDelete === key;
-    return UI.Surface({ shape: { cornerRadius: 4 }, containerColor: isPending ? '#D32F2F' : '#FFEBEE', padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
+    return UI.Surface({ shape: { cornerRadius: 4 }, containerColor: isPending ? colors.error : colors.errorContainer, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
       if (isPending) {
         actions.setPendingDelete('');
         actions.deleteItem(category, index);
@@ -50,7 +52,7 @@ function render(ctx, allData, states, actions) {
         actions.setPendingDelete(key);
       }
     } }, [
-      UI.Text({ text: isPending ? '确认' : '删除', style: 'labelSmall', color: isPending ? '#FFFFFF' : '#D32F2F', fontSize: 9, fontWeight: 'bold' }),
+      UI.Text({ text: isPending ? '确认' : '删除', style: 'labelSmall', color: isPending ? colors.onErrorContainer : colors.error, fontSize: 9, fontWeight: 'bold' }),
     ]);
   }
 
@@ -66,10 +68,10 @@ function render(ctx, allData, states, actions) {
             UI.Icon({ name: getTypeIcon(e.type), tint: getTypeColor(e.type), size: 16 }),
             UI.Spacer({ width: 6 }),
             UI.Column({ weight: 1 }, [
-              UI.Text({ text: e.title || '未命名', style: 'bodySmall', fontWeight: 'bold', color: '#333333' }),
-              e.description ? UI.Text({ text: e.description, style: 'labelSmall', color: '#888888', fontSize: 11, maxLines: 2 }) : null,
+              UI.Text({ text: e.title || '未命名', style: 'bodySmall', fontWeight: 'bold', color: colors.onSurface }),
+              e.description ? UI.Text({ text: e.description, style: 'labelSmall', color: colors.onSurfaceVariant, fontSize: 11, maxLines: 2 }) : null,
             ].filter(Boolean)),
-            e.date ? UI.Text({ text: e.date, style: 'labelSmall', color: '#AAAAAA', fontSize: 9 }) : null,
+            e.date ? UI.Text({ text: e.date, style: 'labelSmall', color: colors.outline, fontSize: 9 }) : null,
             makeDeleteBtn('events', allEvents.indexOf(e), 'events:' + allEvents.indexOf(e)),
           ].filter(Boolean)),
         ])
@@ -81,7 +83,7 @@ function render(ctx, allData, states, actions) {
   for (var tfi = 0; tfi < filteredFinance.length; tfi++) {
     (function(f, idx) {
       var isIncome = f.type === 'income';
-      var amtColor = isIncome ? '#4CAF50' : '#F44336';
+      var amtColor = isIncome ? colors.primary : colors.error;
       var amt = parseFloat(f.amount) || 0;
       timelineItems.push({
         sortDate: f.date || (f.timestamp ? f.timestamp.substring(0,10) : ''),
@@ -90,8 +92,8 @@ function render(ctx, allData, states, actions) {
             UI.Icon({ name: isIncome ? 'add_circle' : 'remove_circle', tint: amtColor, size: 16 }),
             UI.Spacer({ width: 6 }),
             UI.Column({ weight: 1 }, [
-              UI.Text({ text: f.description || f.category || '', style: 'bodySmall', fontWeight: 'bold', color: '#333333', maxLines: 1 }),
-              UI.Surface({ shape: { cornerRadius: 4 }, containerColor: isIncome ? '#E8F5E9' : '#FFEBEE', padding: { left: 4, right: 4, top: 1, bottom: 1 }, margin: { top: 2 } }, [
+              UI.Text({ text: f.description || f.category || '', style: 'bodySmall', fontWeight: 'bold', color: colors.onSurface, maxLines: 1 }),
+              UI.Surface({ shape: { cornerRadius: 4 }, containerColor: isIncome ? colors.primaryContainer : colors.errorContainer, padding: { left: 4, right: 4, top: 1, bottom: 1 }, margin: { top: 2 } }, [
                 UI.Text({ text: f.category || (isIncome ? '收入' : '支出'), style: 'labelSmall', color: amtColor, fontSize: 9 }),
               ]),
             ].filter(Boolean)),
@@ -110,16 +112,16 @@ function render(ctx, allData, states, actions) {
       var ep = m.endDate ? m.endDate.split('-') : null;
       timelineItems.push({
         sortDate: m.startDate,
-        render: UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: '#FCE4EC', padding: 8 }, [
+        render: UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.tertiaryContainer, padding: 8 }, [
           UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
-            UI.Icon({ name: 'favorite', tint: '#E91E63', size: 16 }),
+            UI.Icon({ name: 'favorite', tint: colors.tertiary, size: 16 }),
             UI.Spacer({ width: 6 }),
             UI.Column({ weight: 1 }, [
-              UI.Text({ text: '经期 ' + parseInt(sp[1]) + '/' + parseInt(sp[2]) + (ep ? ' - ' + parseInt(ep[1]) + '/' + parseInt(ep[2]) : ''), style: 'bodySmall', fontWeight: 'bold', color: '#333333' }),
-              m.symptoms ? UI.Text({ text: m.symptoms, style: 'labelSmall', color: '#888888', fontSize: 10 }) : null,
+              UI.Text({ text: '经期 ' + parseInt(sp[1]) + '/' + parseInt(sp[2]) + (ep ? ' - ' + parseInt(ep[1]) + '/' + parseInt(ep[2]) : ''), style: 'bodySmall', fontWeight: 'bold', color: colors.onSurface }),
+              m.symptoms ? UI.Text({ text: m.symptoms, style: 'labelSmall', color: colors.onSurfaceVariant, fontSize: 10 }) : null,
             ].filter(Boolean)),
-            UI.Surface({ shape: { cornerRadius: 4 }, containerColor: ep ? '#E8F5E9' : '#FCE4EC', padding: { left: 4, right: 4, top: 1, bottom: 1 } }, [
-              UI.Text({ text: ep ? '已完成' : '进行中', style: 'labelSmall', color: ep ? '#4CAF50' : '#E91E63', fontSize: 9 }),
+            UI.Surface({ shape: { cornerRadius: 4 }, containerColor: ep ? colors.primaryContainer : colors.tertiaryContainer, padding: { left: 4, right: 4, top: 1, bottom: 1 } }, [
+              UI.Text({ text: ep ? '已完成' : '进行中', style: 'labelSmall', color: ep ? colors.primary : colors.tertiary, fontSize: 9 }),
             ]),
             makeDeleteBtn('menstrual', allMenstrual.indexOf(m), 'menstrual:' + allMenstrual.indexOf(m)),
           ].filter(Boolean)),
@@ -133,9 +135,9 @@ function render(ctx, allData, states, actions) {
 
   if (timelineItems.length === 0) {
     items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 24 }, [
-      UI.Icon({ name: 'timeline', tint: '#BBBBBB', size: 40 }),
+      UI.Icon({ name: 'timeline', tint: colors.outlineVariant, size: 40 }),
       UI.Spacer({ height: 10 }),
-      UI.Text({ text: '暂无时间线记录', style: 'bodyMedium', color: '#999999' }),
+      UI.Text({ text: '暂无时间线记录', style: 'bodyMedium', color: colors.outline }),
     ]));
   } else {
     for (var tli = 0; tli < timelineItems.length; tli++) {

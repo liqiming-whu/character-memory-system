@@ -4,6 +4,9 @@ build/
 *.toolpkg
 *.zip
 
+# Local dev environment
+.claude/
+
 # Dependencies
 node_modules/
 

@@ -2,9 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = Screen;
 
+const theme = require("../memory_system_ui/theme");
+
 function Screen(ctx) {
   var UI = ctx.UI;
-  var colors = ctx.MaterialTheme.colorScheme;
+  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
   // 状态
   var dataState = ctx.useState('cdata', null);
@@ -13,14 +15,14 @@ function Screen(ctx) {
   var selectedContactState = ctx.useState('csel', -1);
   var initRef = ctx.useRef('cinit', false);
 
-  // 颜色/图标映射
+  // 图标映射（颜色走 Material token）
   var relationMap = {
-    family: { label: '家人', icon: 'family_restroom', color: '#E91E63', bg: '#FCE4EC' },
-    colleague: { label: '同事', icon: 'work', color: '#2196F3', bg: '#E3F2FD' },
-    classmate: { label: '同学', icon: 'school', color: '#FF9800', bg: '#FFF3E0' },
-    friend: { label: '朋友', icon: 'sentiment_satisfied_alt', color: '#4CAF50', bg: '#E8F5E9' },
-    service: { label: '服务', icon: 'support_agent', color: '#00BCD4', bg: '#E0F7FA' },
-    other: { label: '其他', icon: 'person', color: '#78909C', bg: '#ECEFF1' }
+    family: { label: '家人', icon: 'family_restroom', color: colors.error, bg: colors.errorContainer },
+    colleague: { label: '同事', icon: 'work', color: colors.primary, bg: colors.primaryContainer },
+    classmate: { label: '同学', icon: 'school', color: colors.tertiary, bg: colors.tertiaryContainer },
+    friend: { label: '朋友', icon: 'sentiment_satisfied_alt', color: colors.primary, bg: colors.primaryContainer },
+    service: { label: '服务', icon: 'support_agent', color: colors.tertiary, bg: colors.tertiaryContainer },
+    other: { label: '其他', icon: 'person', color: colors.onSurfaceVariant, bg: colors.surfaceVariant }
   };
   var groupOrder = ['family', 'colleague', 'friend', 'classmate', 'service', 'other'];
 
@@ -67,17 +69,17 @@ function Screen(ctx) {
   var items = [];
 
   // 标题
-  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: '#7B1FA2', alpha: 0.08, padding: 14, key: 'cTitle' }, [
+  items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: colors.tertiary, alpha: 0.08, padding: 14, key: 'cTitle' }, [
     UI.Row({ verticalAlignment: 'center' }, [
-      UI.Surface({ width: 44, height: 44, shape: { cornerRadius: 22 }, containerColor: '#7B1FA2' }, [
+      UI.Surface({ width: 44, height: 44, shape: { cornerRadius: 22 }, containerColor: colors.tertiary }, [
         UI.Row({ fillMaxWidth: true, height: 44, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
-          UI.Icon({ name: 'diversity_3', tint: '#FFFFFF', size: 24 }),
+          UI.Icon({ name: 'diversity_3', tint: colors.onPrimary, size: 24 }),
         ]),
       ]),
       UI.Spacer({ width: 12 }),
       UI.Column({}, [
-        UI.Text({ text: '人际关系', style: 'titleMedium', fontWeight: 'bold', color: '#7B1FA2' }),
-        UI.Text({ text: '共 ' + allContacts.length + ' 位联系人，' + activeGroups.length + ' 个分组', style: 'bodySmall', color: '#888888' }),
+        UI.Text({ text: '人际关系', style: 'titleMedium', fontWeight: 'bold', color: colors.tertiary }),
+        UI.Text({ text: '共 ' + allContacts.length + ' 位联系人，' + activeGroups.length + ' 个分组', style: 'bodySmall', color: colors.onSurfaceVariant }),
       ]),
     ]),
   ]));
@@ -86,31 +88,33 @@ function Screen(ctx) {
   // 关系分组条（可点选筛选）
   var filterChips = [];
   // 全部
-  filterChips.push(UI.Surface({ shape: { cornerRadius: 16 }, containerColor: !groupFilter ? '#7B1FA2' : '#ECEFF1', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { groupFilterState[1](''); selectedContactState[1](-1); }, key: 'chip-all' }, [
-    UI.Text({ text: '全部 (' + filtered.length + ')', style: 'labelSmall', color: !groupFilter ? '#FFFFFF' : '#666666', fontWeight: !groupFilter ? 'bold' : 'normal' }),
-  ]));
+  filterChips.push(UI.FilterChip({
+    label: UI.Text({ text: '全部 (' + filtered.length + ')', style: 'labelSmall' }),
+    selected: !groupFilter,
+    onClick: function() { groupFilterState[1](''); selectedContactState[1](-1); },
+    key: 'chip-all'
+  }));
   for (var fi = 0; fi < groupOrder.length; fi++) {
     (function(gk) {
       var gInfo = relationMap[gk];
       var cnt = contactGroups[gk] ? contactGroups[gk].length : 0;
       if (cnt === 0) return;
       var isSel = groupFilter === gk;
-      filterChips.push(UI.Surface({ shape: { cornerRadius: 16 }, containerColor: isSel ? gInfo.color : gInfo.bg, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { groupFilterState[1](isSel ? '' : gk); selectedContactState[1](-1); }, key: 'chip-' + gk }, [
-        UI.Row({ verticalAlignment: 'center' }, [
-          UI.Icon({ name: gInfo.icon, tint: isSel ? '#FFFFFF' : gInfo.color, size: 14 }),
-          UI.Spacer({ width: 4 }),
-          UI.Text({ text: gInfo.label + ' (' + cnt + ')', style: 'labelSmall', color: isSel ? '#FFFFFF' : gInfo.color, fontWeight: isSel ? 'bold' : 'normal' }),
-        ]),
-      ]));
+      filterChips.push(UI.FilterChip({
+        label: UI.Text({ text: gInfo.label + ' (' + cnt + ')', style: 'labelSmall', color: isSel ? colors.primary : colors.onSurfaceVariant }),
+        selected: isSel,
+        onClick: function() { groupFilterState[1](isSel ? '' : gk); selectedContactState[1](-1); },
+        key: 'chip-' + gk
+      }));
     })(groupOrder[fi]);
   }
   items.push(UI.Row({ fillMaxWidth: true, spacing: 6, key: 'chips' }, filterChips));
   items.push(UI.Spacer({ height: 6 }));
 
   // 搜索
-  items.push(UI.Surface({ shape: { cornerRadius: 10 }, containerColor: '#F5F5F5', padding: { left: 10, right: 10, top: 4, bottom: 4 }, key: 'cSearch' }, [
+  items.push(UI.Surface({ shape: { cornerRadius: 10 }, containerColor: colors.surfaceVariant, padding: { left: 10, right: 10, top: 4, bottom: 4 }, key: 'cSearch' }, [
     UI.Row({ verticalAlignment: 'center' }, [
-      UI.Icon({ name: 'search', tint: '#999999', size: 16 }),
+      UI.Icon({ name: 'search', tint: colors.outline, size: 16 }),
       UI.Spacer({ width: 6 }),
       UI.TextField({ value: queryState[0] || '', onValueChange: function(v) { queryState[1](v); selectedContactState[1](-1); }, placeholder: '搜索联系人...', weight: 1, singleLine: true }),
     ]),
@@ -133,12 +137,12 @@ function Screen(ctx) {
         UI.Row({ verticalAlignment: 'center', weight: 1 }, [
           UI.Surface({ width: 48, height: 48, shape: { cornerRadius: 24 }, containerColor: rInfo.color }, [
             UI.Row({ fillMaxWidth: true, height: 48, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
-              UI.Text({ text: (sc.name || '?').charAt(0), style: 'titleMedium', fontWeight: 'bold', color: '#FFFFFF' }),
+              UI.Text({ text: (sc.name || '?').charAt(0), style: 'titleMedium', fontWeight: 'bold', color: colors.onPrimary }),
             ]),
           ]),
           UI.Spacer({ width: 12 }),
           UI.Column({ weight: 1 }, [
-            UI.Text({ text: sc.name || '未知', style: 'titleSmall', fontWeight: 'bold', color: '#333333' }),
+            UI.Text({ text: sc.name || '未知', style: 'titleSmall', fontWeight: 'bold', color: colors.onSurface }),
             UI.Row({ verticalAlignment: 'center' }, [
               UI.Surface({ shape: { cornerRadius: 6 }, containerColor: rInfo.bg, padding: { left: 8, right: 8, top: 2, bottom: 2 } }, [
                 UI.Row({ verticalAlignment: 'center' }, [
@@ -148,33 +152,33 @@ function Screen(ctx) {
                 ]),
               ]),
               UI.Spacer({ width: 8 }),
-              UI.Text({ text: '提及 ' + (sc.mentionCount || 1) + ' 次', style: 'labelSmall', color: '#999999', fontSize: 10 }),
+              UI.Text({ text: '提及 ' + (sc.mentionCount || 1) + ' 次', style: 'labelSmall', color: colors.outline, fontSize: 10 }),
             ]),
           ]),
         ]),
-        UI.Surface({ shape: { cornerRadius: 10 }, containerColor: '#F5F5F5', padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() { selectedContactState[1](-1); } }, [
-          UI.Icon({ name: 'close', tint: '#666666', size: 18 }),
+        UI.Surface({ shape: { cornerRadius: 10 }, containerColor: colors.surfaceVariant, padding: { left: 8, right: 8, top: 4, bottom: 4 }, onClick: function() { selectedContactState[1](-1); } }, [
+          UI.Icon({ name: 'close', tint: colors.onSurfaceVariant, size: 18 }),
         ]),
       ]));
 
       // 属性卡
       if (attrs.length > 0) {
         detail.push(UI.Spacer({ height: 10 }));
-        detail.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: '#F3E5F5', padding: 10, key: 'cdAttrs' }, [
+        detail.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.tertiaryContainer, padding: 10, key: 'cdAttrs' }, [
           UI.Column({}, [
             UI.Row({ verticalAlignment: 'center' }, [
-              UI.Icon({ name: 'badge', tint: '#7B1FA2', size: 16 }),
+              UI.Icon({ name: 'badge', tint: colors.tertiary, size: 16 }),
               UI.Spacer({ width: 6 }),
-              UI.Text({ text: '属性信息', style: 'labelMedium', fontWeight: 'bold', color: '#7B1FA2' }),
+              UI.Text({ text: '属性信息', style: 'labelMedium', fontWeight: 'bold', color: colors.tertiary }),
             ]),
             UI.Spacer({ height: 6 }),
           ].concat(attrs.map(function(a, idx) {
             return UI.Row({ fillMaxWidth: true, verticalAlignment: 'center', key: 'cda-' + idx }, [
-              UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#E1BEE7', padding: { left: 8, right: 8, top: 3, bottom: 3 }, key: 'cdak-' + idx }, [
-                UI.Text({ text: a.key, style: 'labelSmall', color: '#6A1B9A', fontSize: 11, fontWeight: 'bold' }),
+              UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.tertiaryContainer, padding: { left: 8, right: 8, top: 3, bottom: 3 }, key: 'cdak-' + idx }, [
+                UI.Text({ text: a.key, style: 'labelSmall', color: colors.tertiary, fontSize: 11, fontWeight: 'bold' }),
               ]),
               UI.Spacer({ width: 8 }),
-              UI.Text({ text: a.value, style: 'bodySmall', color: '#333333', weight: 1 }),
+              UI.Text({ text: a.value, style: 'bodySmall', color: colors.onSurface, weight: 1 }),
             ]);
           }))),
         ]));
@@ -183,38 +187,38 @@ function Screen(ctx) {
       // 提及时间线
       if (ctxs.length > 0) {
         detail.push(UI.Spacer({ height: 10 }));
-        detail.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: 'surfaceVariant', padding: 10, key: 'cdCtx' }, [
+        detail.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.surfaceVariant, padding: 10, key: 'cdCtx' }, [
           UI.Column({}, [
             UI.Row({ verticalAlignment: 'center' }, [
-              UI.Icon({ name: 'history', tint: '#7B1FA2', size: 16 }),
+              UI.Icon({ name: 'history', tint: colors.tertiary, size: 16 }),
               UI.Spacer({ width: 6 }),
-              UI.Text({ text: '提及记录 (' + ctxs.length + ')', style: 'labelMedium', fontWeight: 'bold', color: '#7B1FA2' }),
+              UI.Text({ text: '提及记录 (' + ctxs.length + ')', style: 'labelMedium', fontWeight: 'bold', color: colors.tertiary }),
             ]),
             UI.Spacer({ height: 6 }),
           ].concat(ctxs.slice(-10).reverse().map(function(cx, cxi) {
             return UI.Row({ fillMaxWidth: true, verticalAlignment: 'top', key: 'cdcx-' + cxi }, [
               UI.Column({ horizontalAlignment: 'center', width: 20 }, [
-                UI.Surface({ width: 8, height: 8, shape: { cornerRadius: 4 }, containerColor: '#CE93D8', key: 'cdot-' + cxi }),
-                cxi < Math.min(ctxs.length, 10) - 1 ? UI.Surface({ width: 2, height: 20, containerColor: '#E1BEE7', key: 'dline-' + cxi }) : null,
+                UI.Surface({ width: 8, height: 8, shape: { cornerRadius: 4 }, containerColor: colors.tertiary, key: 'cdot-' + cxi }),
+                cxi < Math.min(ctxs.length, 10) - 1 ? UI.Surface({ width: 2, height: 20, containerColor: colors.outlineVariant, key: 'dline-' + cxi }) : null,
               ].filter(Boolean)),
               UI.Spacer({ width: 8 }),
               UI.Column({ weight: 1 }, [
-                UI.Text({ text: cx.text || '', style: 'bodySmall', color: '#555555', fontSize: 12 }),
-                cx.date ? UI.Text({ text: new Date(cx.date).toLocaleDateString('zh-CN'), style: 'labelSmall', color: '#BBBBBB', fontSize: 9 }) : null,
+                UI.Text({ text: cx.text || '', style: 'bodySmall', color: colors.onSurfaceVariant, fontSize: 12 }),
+                cx.date ? UI.Text({ text: new Date(cx.date).toLocaleDateString('zh-CN'), style: 'labelSmall', color: colors.outlineVariant, fontSize: 9 }) : null,
               ].filter(Boolean)),
             ]);
-          })).concat(ctxs.length > 10 ? [UI.Text({ text: '... 还有 ' + (ctxs.length - 10) + ' 条记录', style: 'labelSmall', color: '#BBBBBB', fontSize: 10 })] : [])),
+          })).concat(ctxs.length > 10 ? [UI.Text({ text: '... 还有 ' + (ctxs.length - 10) + ' 条记录', style: 'labelSmall', color: colors.outlineVariant, fontSize: 10 })] : [])),
         ]));
       }
 
       if (lastDate) {
         detail.push(UI.Spacer({ height: 4 }));
         detail.push(UI.Row({ fillMaxWidth: true, horizontalArrangement: 'end' }, [
-          UI.Text({ text: '最近提及: ' + lastDate, style: 'labelSmall', color: '#999999', fontSize: 10 }),
+          UI.Text({ text: '最近提及: ' + lastDate, style: 'labelSmall', color: colors.outline, fontSize: 10 }),
         ]));
       }
 
-      items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: '#FFFFFF', border: { width: 2, color: '#CE93D8' }, padding: 14, key: 'cDetailPanel' }, [
+      items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 14 }, containerColor: colors.surface, border: { width: 2, color: colors.outlineVariant }, padding: 14, key: 'cDetailPanel' }, [
         UI.Column({ spacing: 4 }, detail),
       ]));
       items.push(UI.Spacer({ height: 8 }));
@@ -224,10 +228,10 @@ function Screen(ctx) {
   // 联系人列表
   if (filtered.length === 0) {
     items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 32 }, [
-      UI.Icon({ name: 'group_off', tint: '#CCCCCC', size: 48 }),
+      UI.Icon({ name: 'group_off', tint: colors.outlineVariant, size: 48 }),
       UI.Spacer({ height: 12 }),
-      UI.Text({ text: '暂无联系人数据', style: 'bodyMedium', color: '#999999' }),
-      UI.Text({ text: '聊天中提到的人物将被自动提取', style: 'bodySmall', color: '#BBBBBB' }),
+      UI.Text({ text: '暂无联系人数据', style: 'bodyMedium', color: colors.outline }),
+      UI.Text({ text: '聊天中提到的人物将被自动提取', style: 'bodySmall', color: colors.outlineVariant }),
     ]));
   } else {
     // 按分组展示
@@ -267,28 +271,28 @@ function Screen(ctx) {
             cardItems.push(UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
               UI.Surface({ width: 38, height: 38, shape: { cornerRadius: 19 }, containerColor: rInfo.color }, [
                 UI.Row({ fillMaxWidth: true, height: 38, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
-                  UI.Text({ text: initial, style: 'labelMedium', fontWeight: 'bold', color: '#FFFFFF' }),
+                  UI.Text({ text: initial, style: 'labelMedium', fontWeight: 'bold', color: colors.onPrimary }),
                 ]),
               ]),
               UI.Spacer({ width: 10 }),
               UI.Column({ weight: 1 }, [
                 UI.Row({ verticalAlignment: 'center' }, [
-                  UI.Text({ text: c.name || '未知', style: 'bodySmall', fontWeight: 'bold', color: '#333333' }),
+                  UI.Text({ text: c.name || '未知', style: 'bodySmall', fontWeight: 'bold', color: colors.onSurface }),
                 ]),
                 UI.Row({ verticalAlignment: 'center' }, [
                   UI.Surface({ shape: { cornerRadius: 4 }, containerColor: rInfo.bg, padding: { left: 4, right: 4, top: 1, bottom: 1 } }, [
                     UI.Text({ text: rInfo.label, style: 'labelSmall', color: rInfo.color, fontSize: 9 }),
                   ]),
                   UI.Spacer({ width: 4 }),
-                  UI.Text({ text: (c.mentionCount || 1) + '次', style: 'labelSmall', color: '#BBBBBB', fontSize: 9 }),
-                  attrs.length > 0 ? UI.Text({ text: ' · ' + attrs.length + '个属性', style: 'labelSmall', color: '#BBBBBB', fontSize: 9 }) : null,
+                  UI.Text({ text: (c.mentionCount || 1) + '次', style: 'labelSmall', color: colors.outlineVariant, fontSize: 9 }),
+                  attrs.length > 0 ? UI.Text({ text: ' · ' + attrs.length + '个属性', style: 'labelSmall', color: colors.outlineVariant, fontSize: 9 }) : null,
                 ].filter(Boolean)),
-                lastCtx ? UI.Text({ text: lastCtx, style: 'labelSmall', color: '#999999', fontSize: 10, maxLines: 1 }) : null,
+                lastCtx ? UI.Text({ text: lastCtx, style: 'labelSmall', color: colors.outline, fontSize: 10, maxLines: 1 }) : null,
               ].filter(Boolean)),
               UI.Icon({ name: isSel ? 'expand_less' : 'chevron_right', tint: rInfo.color, size: 18 }),
             ]));
 
-            items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: isSel ? rInfo.bg : 'surfaceVariant', padding: 10, onClick: function() { selectedContactState[1](isSel ? -1 : globalIdx); }, key: 'cc-' + gIdx }, [
+            items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: isSel ? rInfo.bg : colors.surfaceVariant, padding: 10, onClick: function() { selectedContactState[1](isSel ? -1 : globalIdx); }, key: 'cc-' + gIdx }, [
               UI.Column({}, cardItems),
             ]));
             items.push(UI.Spacer({ height: 3 }));

@@ -4,6 +4,7 @@ exports.default = Screen;
 
 const shared = require("./shared");
 const { relationMap, parseResult, pad2 } = shared;
+const theme = require("./theme");
 const overviewTab = require("./tabs/overview");
 const todosTab = require("./tabs/todos");
 const timelineTab = require("./tabs/timeline");
@@ -14,16 +15,17 @@ const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
 const TAB_REGISTRY = [
-  { id: 0, icon: 'dashboard',     label: '概览',   color: '#4CAF50' },
-  { id: 1, icon: 'timeline',      label: '时间线', color: '#2196F3' },
-  { id: 2, icon: 'menu_book',     label: '知识',   color: '#FF9800' },
-  { id: 3, icon: 'person',        label: '角色',   color: '#5E35B1' },
-  { id: 4, icon: 'search',        label: '搜索',   color: '#00897B' },
-  { id: 5, icon: 'settings',      label: '设置',   color: '#607D8B' },
+  { id: 0, icon: 'dashboard',     label: '概览' },
+  { id: 1, icon: 'checklist',     label: '待办' },
+  { id: 2, icon: 'timeline',      label: '时间线' },
+  { id: 3, icon: 'menu_book',     label: '知识' },
+  { id: 4, icon: 'person',        label: '角色' },
+  { id: 5, icon: 'settings',      label: '设置' },
 ];
 
 function Screen(ctx) {
   var UI = ctx.UI;
+  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
   // ===== 状态 =====
   var cachedData = { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] };
@@ -42,6 +44,7 @@ function Screen(ctx) {
   } catch(e) { uiBoot = {}; }
 
   var tabState = ctx.useState('tab', (uiBoot.tab !== undefined ? uiBoot.tab : 0));
+  var showSearchState = ctx.useState('showSearch', false);
   var dataState = ctx.useState('allData', cachedData);
   var dataLoadedState = ctx.useState('allDataLoaded', false);
   var analyzingState = ctx.useState('analyzing', false);
@@ -165,7 +168,7 @@ var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
   }
   // ===== 初始化时加载记忆 =====
   var currentTab = tabState[0];
-  if ((currentTab === 2 || currentTab === 4) && !memoryLoadedState[0] && !memoryLoadingState[0] && !memoryLoadScheduledRef.current) {
+  if ((currentTab === 3) && !memoryLoadedState[0] && !memoryLoadingState[0] && !memoryLoadScheduledRef.current) {
     memoryLoadScheduledRef.current = true;
     setTimeout(function() {
       loadKnowledgeMemories().finally(function() { memoryLoadScheduledRef.current = false; });
@@ -524,7 +527,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     }
     var weekH = ['日','一','二','三','四','五','六'];
     var weekR = [];
-    for (var w2 = 0; w2 < 7; w2++) weekR.push(UI.Column({ horizontalAlignment: 'center', weight: 1 }, [UI.Text({ text: weekH[w2], style: 'labelSmall', color: '#999999', fontSize: 10, fontWeight: 'bold' })]));
+    for (var w2 = 0; w2 < 7; w2++) weekR.push(UI.Column({ horizontalAlignment: 'center', weight: 1 }, [UI.Text({ text: weekH[w2], style: 'labelSmall', color: colors.outline, fontSize: 10, fontWeight: 'bold' })]));
     var dateRows = [UI.Row({ fillMaxWidth: true }, weekR)];
     var curRow = [];
     for (var ci2 = 0; ci2 < cells.length; ci2++) {
@@ -532,8 +535,8 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
         if (!cell) {
           curRow.push(UI.Column({ horizontalAlignment: 'center', weight: 1 }, [UI.Text({ text: '', style: 'labelSmall' })]));
         } else {
-          var bg = cell.isStart || cell.isEnd ? '#4CAF50' : cell.isInRange ? '#E8F5E9' : cell.isToday ? '#FFF3E0' : 'transparent';
-          var fg = cell.isStart || cell.isEnd ? '#FFFFFF' : cell.isToday ? '#FF9800' : '#333333';
+          var bg = cell.isStart || cell.isEnd ? colors.primary : cell.isInRange ? colors.primaryContainer : cell.isToday ? colors.errorContainer : 'transparent';
+          var fg = cell.isStart || cell.isEnd ? colors.onPrimary : cell.isToday ? colors.error : colors.onSurface;
           curRow.push(UI.Column({ horizontalAlignment: 'center', weight: 1 }, [
             UI.Surface({ width: 28, height: 28, shape: { cornerRadius: 14 }, containerColor: bg, onClick: function() { handleCalClick(cell.dateStr); } }, [
               UI.Row({ fillMaxWidth: true, fillMaxHeight: true, horizontalArrangement: 'center', verticalAlignment: 'center' }, [
@@ -549,20 +552,20 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
       })(cells[ci2]);
     }
     calPanel = [
-      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: '#FAFAFA', border: { width: 1, color: '#E0E0E0' }, padding: 10 }, [
+      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.surface, border: { width: 1, color: colors.outlineVariant }, padding: 10 }, [
         UI.Column({ spacing: 4 }, [
           UI.Row({ fillMaxWidth: true, horizontalArrangement: 'spaceBetween', verticalAlignment: 'center' }, [
-            UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#F5F5F5', padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
+            UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.surfaceVariant, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
               var pm = calMonth - 1; var py = calYear;
               if (pm < 1) { pm = 12; py--; }
               calYearState[1](py); calMonthState[1](pm);
-            } }, [UI.Icon({ name: 'chevron_left', tint: '#666666', size: 18 })]),
-            UI.Text({ text: calYear + '年' + calMonth + '月', style: 'labelMedium', color: '#333333', fontWeight: 'bold' }),
-            UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#F5F5F5', padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
+            } }, [UI.Icon({ name: 'chevron_left', tint: colors.onSurfaceVariant, size: 18 })]),
+            UI.Text({ text: calYear + '年' + calMonth + '月', style: 'labelMedium', color: colors.onSurface, fontWeight: 'bold' }),
+            UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.surfaceVariant, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
               var nm = calMonth + 1; var ny = calYear;
               if (nm > 12) { nm = 1; ny++; }
               calYearState[1](ny); calMonthState[1](nm);
-            } }, [UI.Icon({ name: 'chevron_right', tint: '#666666', size: 18 })]),
+            } }, [UI.Icon({ name: 'chevron_right', tint: colors.onSurfaceVariant, size: 18 })]),
           ]),
         ].concat(dateRows)),
       ]),
@@ -572,21 +575,21 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
 
   // ===== 顶部卡片 =====
   var pendingTodoCount = (allData.todos || []).filter(function(t) { return !t.completed; }).length;
-  var headerCard = UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: '#4CAF50', alpha: 0.08, padding: 12 }, [
+  var headerCard = UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.primaryContainer, padding: 12 }, [
     UI.Column({ fillMaxWidth: true }, [
       UI.Row({ fillMaxWidth: true, horizontalArrangement: 'spaceBetween', verticalAlignment: 'center' }, [
         UI.Column({}, [
-          UI.Text({ text: '📋 记忆系统', style: 'labelMedium', color: '#4CAF50' }),
-          UI.Text({ text: (allData.todos || []).length + ' 待办 · ' + pendingTodoCount + ' 待完成 · ' + (allData.events || []).length + ' 事件', style: 'labelSmall', color: '#888888' }),
+          UI.Text({ text: '📋 记忆系统', style: 'labelMedium', color: colors.primary }),
+          UI.Text({ text: (allData.todos || []).length + ' 待办 · ' + pendingTodoCount + ' 待完成 · ' + (allData.events || []).length + ' 事件', style: 'labelSmall', color: colors.onSurfaceVariant }),
         ]),
         UI.Row({ verticalAlignment: 'center' }, [
-          UI.Surface({ shape: { cornerRadius: 12 }, containerColor: analyzing ? '#FFF3E0' : '#4CAF50', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { if (!analyzing) doAnalyze(); } }, [
-            UI.Text({ text: analyzing ? '⏳ 分析中' : '🤖 分析', style: 'labelSmall', color: analyzing ? '#FF9800' : '#FFFFFF', fontWeight: 'bold' }),
+          UI.Surface({ shape: { cornerRadius: 12 }, containerColor: analyzing ? colors.errorContainer : colors.primary, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { if (!analyzing) doAnalyze(); } }, [
+            UI.Text({ text: analyzing ? '⏳ 分析中' : '🤖 分析', style: 'labelSmall', color: analyzing ? colors.error : colors.onPrimary, fontWeight: 'bold' }),
           ]),
         ]),
       ]),
-      resultText ? UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#E8F5E9', padding: { left: 8, right: 8, top: 4, bottom: 4 }, margin: { top: 8 } }, [
-        UI.Text({ text: resultText, style: 'labelSmall', color: '#2E7D32', fontSize: 11 }),
+      resultText ? UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.primaryContainer, padding: { left: 8, right: 8, top: 4, bottom: 4 }, margin: { top: 8 } }, [
+        UI.Text({ text: resultText, style: 'labelSmall', color: colors.primary, fontSize: 11 }),
       ]) : null,
     ].filter(Boolean)),
   ]);
@@ -595,66 +598,79 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   var cfgSection = [];
   if (showCfg) {
     cfgSection = [
-      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: '#FFF8E1', padding: 12, border: { width: 1, color: '#FFB300' } }, [
+      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.errorContainer, padding: 12, border: { width: 1, color: colors.error } }, [
         UI.Column({ spacing: 8 }, [
-          UI.Text({ text: '🔧 API 配置', style: 'labelMedium', fontWeight: 'bold', color: '#F57F17' }),
+          UI.Text({ text: '🔧 API 配置', style: 'labelMedium', fontWeight: 'bold', color: colors.error }),
           UI.TextField({ value: endpoint, onValueChange: setEndpoint, placeholder: 'Endpoint', singleLine: true }),
           UI.TextField({ value: apiKey, onValueChange: setApiKey, placeholder: 'API Key', singleLine: true }),
           UI.TextField({ value: model, onValueChange: setModel, placeholder: '模型名', singleLine: true }),
-          UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#4CAF50', onClick: saveConfig, fillMaxWidth: true, padding: { top: 6, bottom: 6 } }, [
-            UI.Text({ text: '保存配置', style: 'labelMedium', color: '#FFFFFF', fontWeight: 'bold' }),
-          ]),
+          UI.Button({ text: '保存配置', onClick: saveConfig, fillMaxWidth: true }),
         ]),
       ]),
       UI.Spacer({ height: 6 }),
     ];
   }
 
-  // ===== 搜索栏 =====
-  var searchBar = UI.Surface({ shape: { cornerRadius: 10 }, containerColor: '#F5F5F5', padding: { left: 8, right: 8, top: 4, bottom: 4 }, fillMaxWidth: true }, [
-    UI.Row({ verticalAlignment: 'center' }, [
-      UI.Icon({ name: 'search', tint: '#999999', size: 16 }),
+  // ===== 搜索栏（按需展开）=====
+  var showSearch = showSearchState[0];
+  var searchBar = UI.Surface({ shape: { cornerRadius: 10 }, containerColor: colors.surfaceVariant, padding: { left: 8, right: 8, top: 4, bottom: 4 }, fillMaxWidth: true }, [
+    showSearch ? UI.Row({ verticalAlignment: 'center' }, [
+      UI.Icon({ name: 'search', tint: colors.outline, size: 16 }),
       UI.Spacer({ width: 6 }),
       UI.TextField({ value: q, onValueChange: queryState[1], placeholder: '搜索...', weight: 1, singleLine: true }),
-      (q || dateStart || dateEnd) ? UI.Surface({ shape: { cornerRadius: 6 }, containerColor: '#FFEBEE', padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() { queryState[1](''); dateStartState[1](''); dateEndState[1](''); } }, [
-        UI.Text({ text: '清除', style: 'labelSmall', color: '#F44336', fontSize: 10 }),
+      (q || dateStart || dateEnd) ? UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.errorContainer, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() { queryState[1](''); dateStartState[1](''); dateEndState[1](''); } }, [
+        UI.Text({ text: '清除', style: 'labelSmall', color: colors.error, fontSize: 10 }),
       ]) : null,
-    ].filter(Boolean)),
+      UI.Spacer({ width: 4 }),
+      UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.surfaceVariant, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() { showSearchState[1](false); } }, [
+        UI.Icon({ name: 'close', tint: colors.outline, size: 16 }),
+      ]),
+    ].filter(Boolean)) : UI.Row({ verticalAlignment: 'center' }, [
+      UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primaryContainer, padding: { left: 12, right: 12, top: 5, bottom: 5 }, onClick: function() { showSearchState[1](true); } }, [
+        UI.Row({ verticalAlignment: 'center' }, [
+          UI.Icon({ name: 'search', tint: colors.primary, size: 16 }),
+          UI.Spacer({ width: 6 }),
+          UI.Text({ text: '搜索', style: 'labelSmall', color: colors.primary, fontWeight: 'bold' }),
+        ]),
+      ]),
+    ]),
   ]);
 
   // ===== 工具栏 =====
   var toolRow = UI.Row({ fillMaxWidth: true, spacing: 4 }, [
-    UI.Surface({ shape: { cornerRadius: 8 }, containerColor: (dateStart || dateEnd) ? '#C8E6C9' : '#F5F5F5', padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() { showCalState[1](!showCal); } }, [
+    UI.Surface({ shape: { cornerRadius: 8 }, containerColor: (dateStart || dateEnd) ? colors.primaryContainer : colors.surfaceVariant, padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() { showCalState[1](!showCal); } }, [
       UI.Row({ verticalAlignment: 'center' }, [
-        UI.Icon({ name: 'calendar_month', tint: (dateStart || dateEnd) ? '#4CAF50' : '#999999', size: 14 }),
+        UI.Icon({ name: 'calendar_month', tint: (dateStart || dateEnd) ? colors.primary : colors.outline, size: 14 }),
         UI.Spacer({ width: 4 }),
-        UI.Text({ text: dateStart && dateEnd ? dateStart + ' ~ ' + dateEnd : dateStart ? dateStart + ' ~ ?' : '日期', style: 'labelSmall', color: (dateStart || dateEnd) ? '#4CAF50' : '#999999', fontSize: 10 }),
+        UI.Text({ text: dateStart && dateEnd ? dateStart + ' ~ ' + dateEnd : dateStart ? dateStart + ' ~ ?' : '日期', style: 'labelSmall', color: (dateStart || dateEnd) ? colors.primary : colors.outline, fontSize: 10 }),
       ]),
     ]),
-    UI.Surface({ shape: { cornerRadius: 8 }, containerColor: '#4CAF50', padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() { tabState[1](1); } }, [
+    UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: { left: 8, right: 8, top: 3, bottom: 3 }, onClick: function() { tabState[1](1); } }, [
       UI.Row({ verticalAlignment: 'center' }, [
-        UI.Icon({ name: 'add', tint: '#FFFFFF', size: 14 }),
+        UI.Icon({ name: 'add', tint: colors.onPrimary, size: 14 }),
         UI.Spacer({ width: 4 }),
-        UI.Text({ text: '新增', style: 'labelSmall', color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' }),
+        UI.Text({ text: '新增', style: 'labelSmall', color: colors.onPrimary, fontSize: 10, fontWeight: 'bold' }),
       ]),
     ]),
   ]);
 
   // ===== 筛选 Chips =====
   var typeFilters = [];
-  function makeFilterChip(label, value, color) {
+  function makeFilterChip(label, value) {
     var isActive = filterType === value;
-    typeFilters.push(UI.Surface({ shape: { cornerRadius: 12 }, containerColor: isActive ? color : '#F5F5F5', padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { filterTypeState[1](isActive ? '' : value); } }, [
-      UI.Text({ text: label, style: 'labelSmall', color: isActive ? '#FFFFFF' : '#666666', fontSize: 11 }),
-    ]));
+    typeFilters.push(UI.FilterChip({
+      label: UI.Text({ text: label, style: 'labelSmall' }),
+      selected: isActive,
+      onClick: function() { filterTypeState[1](isActive ? '' : value); }
+    }));
   }
 
-  if (currentTab === 1) {
-    makeFilterChip('活动', 'activity', '#2196F3');
-    makeFilterChip('日程', 'schedule', '#FF9800');
-    makeFilterChip('支出', 'expense', '#F44336');
-    makeFilterChip('收入', 'income', '#4CAF50');
-    makeFilterChip('经期', 'menstrual', '#E91E63');
+  if (currentTab === 2) {
+    makeFilterChip('活动', 'activity');
+    makeFilterChip('日程', 'schedule');
+    makeFilterChip('支出', 'expense');
+    makeFilterChip('收入', 'income');
+    makeFilterChip('经期', 'menstrual');
   }
 
   var filterRow = typeFilters.length > 0 ? [
@@ -667,14 +683,14 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   for (var ti = 0; ti < TAB_REGISTRY.length; ti++) {
     (function(t) {
       var isSel = currentTab === t.id;
-      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? t.color : 'transparent', onClick: function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 2 || t.id === 4) memoryLoadedState[1](false); } }, [
+      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); } }, [
         UI.Column({ fillMaxWidth: true, fillMaxHeight: true, horizontalAlignment: 'center', verticalArrangement: 'center' }, [
           UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
-            UI.Icon({ name: t.icon, tint: isSel ? '#FFFFFF' : '#8D8D96', size: 21 }),
+            UI.Icon({ name: t.icon, tint: isSel ? colors.primary : colors.outline, size: 21 }),
           ]),
           UI.Spacer({ height: 2 }),
           UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
-            UI.Text({ text: t.label, style: 'labelSmall', color: isSel ? '#FFFFFF' : '#777780', maxLines: 1 }),
+            UI.Text({ text: t.label, style: 'labelSmall', color: isSel ? colors.primary : colors.onSurfaceVariant, maxLines: 1 }),
           ]),
         ]),
       ]));
@@ -726,38 +742,35 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   var tabContent;
   switch (currentTab) {
     case 0: tabContent = overviewTab.render(ctx, allData); break;
-    case 1: tabContent = timelineTab.render(ctx, allData, states, actions); break;
-    case 2: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
-    case 3: tabContent = characterTab.render(ctx, screenPersonaState[0], screenCharMemoriesState[0]); break;
-    case 4:
-      var searchStates = Object.assign({}, states, { memQuery: q });
-      tabContent = knowledgeTab.render(ctx, allData, searchStates, actions, memoryState[0]);
-      break;
+    case 1: tabContent = todosTab.render(ctx, allData, states, actions); break;
+    case 2: tabContent = timelineTab.render(ctx, allData, states, actions); break;
+    case 3: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
+    case 4: tabContent = characterTab.render(ctx, screenPersonaState[0], screenCharMemoriesState[0]); break;
     case 5: tabContent = [
-      UI.Text({ text: '设置', style: 'titleMedium', color: '#37474F', fontWeight: 'bold' }),
-      UI.Text({ text: '提取模型配置仅用于结构化分析；长期记忆使用 Operit 原生 Memory。', style: 'bodySmall', color: '#777777' }),
+      UI.Text({ text: '设置', style: 'titleMedium', color: colors.onSurface, fontWeight: 'bold' }),
+      UI.Text({ text: '提取模型配置仅用于结构化分析；长期记忆使用 Operit 原生 Memory。', style: 'bodySmall', color: colors.onSurfaceVariant }),
       UI.Spacer({ height: 4 }),
-      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: '#EDE7F6', padding: 12, border: { width: 1, color: '#D1C4E9' } }, [
+      UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 10 }, containerColor: colors.surfaceContainerHigh, padding: 12, border: { width: 1, color: colors.outlineVariant } }, [
         UI.Column({ spacing: 8 }, [
-          UI.Text({ text: '🧠 记忆注入', style: 'labelMedium', fontWeight: 'bold', color: '#4527A0' }),
+          UI.Text({ text: '🧠 记忆注入', style: 'labelMedium', fontWeight: 'bold', color: colors.primary }),
           UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
             UI.Column({ weight: 1, spacing: 2 }, [
-              UI.Text({ text: '记忆注入', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
-              UI.Text({ text: '发送消息时附加相关记忆附件。', style: 'labelSmall', color: '#777777' }),
+              UI.Text({ text: '记忆注入', style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
+              UI.Text({ text: '发送消息时附加相关记忆附件。', style: 'labelSmall', color: colors.onSurfaceVariant }),
             ]),
             UI.Switch({ checked: !!(injectionState[0] && injectionState[0].enabled), onCheckedChange: function(v) { saveInjectionSettings({ enabled: v }); } }),
           ]),
           UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
             UI.Column({ weight: 1, spacing: 2 }, [
-              UI.Text({ text: '注入内容随消息保存', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
-              UI.Text({ text: '开启：附件随用户消息一起落盘；关闭：仅发送给模型，不写入聊天记录。', style: 'labelSmall', color: '#777777' }),
+              UI.Text({ text: '注入内容随消息保存', style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
+              UI.Text({ text: '开启：附件随用户消息一起落盘；关闭：仅发送给模型，不写入聊天记录。', style: 'labelSmall', color: colors.onSurfaceVariant }),
             ]),
             UI.Switch({ checked: !!(injectionState[0] && injectionState[0].persist), onCheckedChange: function(v) { saveInjectionSettings({ persist: v }); } }),
           ]),
           UI.Column({ fillMaxWidth: true, spacing: 4 }, [
             UI.Column({ spacing: 2 }, [
-              UI.Text({ text: '每次注入记忆条数', style: 'bodySmall', color: '#333333', fontWeight: 'bold' }),
-              UI.Text({ text: '输入 1-20 自动保存（默认 5）。', style: 'labelSmall', color: '#777777' }),
+              UI.Text({ text: '每次注入记忆条数', style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
+              UI.Text({ text: '输入 1-20 自动保存（默认 5）。', style: 'labelSmall', color: colors.onSurfaceVariant }),
             ]),
             UI.TextField({ value: injectionLimitInputState[0], onValueChange: onInjectionLimitChange, placeholder: (injectionState[0] && injectionState[0].maxMemories ? String(injectionState[0].maxMemories) : '5'), singleLine: true }),
           ]),
@@ -776,9 +789,9 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   } }, [
     headerCard,
     UI.Spacer({ height: 6 }),
-  ].concat((currentTab === 1 || currentTab === 4) ? [searchBar] : []).concat(currentTab === 1 ? calPanel : []).concat(filterRow).concat([
+  ].concat((currentTab === 2 || currentTab === 3) ? [searchBar] : []).concat(currentTab === 2 ? calPanel : []).concat(filterRow).concat([
     UI.LazyColumn({ fillMaxWidth: true, weight: 1, spacing: 4 }, tabContent),
-    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 16 }, containerColor: '#F0EFF5', padding: 5 }, [
+    UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 16 }, containerColor: colors.surfaceVariant, padding: 5 }, [
       UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, tabItems),
     ]),
   ]));

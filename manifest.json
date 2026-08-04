@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "toolpkg_id": "com.operit.character_memory_system",
-  "version": "1.5.2",
+  "version": "1.5.4",
   "main": "main.js",
   "display_name": {
     "zh": "角色记忆系统",
     "en": "Character Memory System"
   },
   "description": {
-    "zh": "保留原生活助手六分类，并基于角色卡ID、Persona目录和Operit原生Memory Profile提供角色长期记忆、隔离召回、Prompt注入与角色管理界面；记忆注入采用官方附件方案，可在设置页开关并选择是否随消息保存。",
-    "en": "Preserves the six life-assistant categories and adds character-scoped long-term memory, isolated recall, prompt injection, and management UI through Operit native Memory Profiles and persona folders. Memory injection uses the official attachment scheme with a settings toggle for whether injected content is persisted with the message."
+    "zh": "根据记忆系统插件开发，不能与记忆系统插件同时启用。使用Material Design重构UI。实现按角色卡隔离记忆功能。并基于角色卡ID、Persona目录和Operit原生Memory Profile提供角色长期记忆、隔离召回、Prompt注入与角色管理界面；记忆注入采用官方额外信息注入插件方案，可在设置页开关并选择是否随消息保存。",
+    "en": "Developed based on the memory system plugin; cannot be enabled simultaneously with it. UI rebuilt with Material Design. Implements character-card-scoped memory isolation, and provides character long-term memory, isolated recall, prompt injection, and character management UI through character card ID, Persona folders, and Operit native Memory Profiles. Memory injection follows the official extra-info injection plugin scheme, togglable in settings with an option for whether injected content is persisted with the message."
   },
   "enabled_by_default": true,
   "env": [

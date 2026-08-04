@@ -4,6 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerToolPkg = registerToolPkg;
+var prompts_1 = require("./packages/prompts");
+var buildTopicCheckPrompt = prompts_1.buildTopicCheckPrompt;
+var buildExtractionPrompt = prompts_1.buildExtractionPrompt;
 exports.onPromptInput = onPromptInput;
 exports.onInputMenuToggle = onInputMenuToggle;
 exports.onPromptFinalize = onPromptFinalize;
@@ -11,7 +14,6 @@ exports.onPromptFinalize = onPromptFinalize;
 var DATA_DIR = '/sdcard/Download/Operit/character_memory_system_data';
 var TRIGGER_FILE = DATA_DIR + '/trigger.json';
 var EXTRACTED_FILE = DATA_DIR + '/extracted.json';
-var MEMORY_FILE = DATA_DIR + '/memories.json';
 var PERSONA_FILE = DATA_DIR + '/active_persona.json';
 var SETTINGS_FILE = DATA_DIR + '/settings.json';
 var GLOBAL_MEMORY_FOLDER = 'character_memory/global';
@@ -20,6 +22,7 @@ var INJECTION_ATTACHMENT_ID_PREFIX = 'character_memory_';
 var INJECTION_ATTACHMENT_FILE_PREFIX = 'CMS';
 var INJECTION_MARKER = 'id="' + INJECTION_ATTACHMENT_ID_PREFIX;
 var COOLDOWN_MS = 20 * 60 * 1000; // 连续静默20分钟后结算
+var ANALYSIS_RETRY_BACKOFF_MS = 10 * 60 * 1000; // 分析失败后 10 分钟内不重复重试，避免反复白烧 token
 
 function analysisWatermark(state, chatId) {
   if (state && state.watermarks && state.watermarks[chatId]) return state.watermarks[chatId];
@@ -178,37 +181,6 @@ async function callAI(prompt, temperature) {
 }
 
 // ===== Prompt 构建器 =====
-function buildTopicCheckPrompt(dialogText, chatIdChanged) {
-  var hint = chatIdChanged
-    ? '\n注意：用户已经切换到了不同的对话窗口，这强烈暗示之前的对话可能已经结束。'
-    : '';
-  return '请判断以下对话的话题是否已经结束（用户很可能不会再继续这个话题了）。' + hint + '\n\n对话内容：\n' + dialogText + '\n\n请返回纯JSON（不要markdown代码块）：\n{"topicEnded": true或false, "reason": "简要理由"}';
-}
-
-function buildExtractionPrompt(dialogText, existingData, personaName) {
-  var existingSummary = '';
-  if (existingData) {
-    var parts = [];
-    if (existingData.todos && existingData.todos.length > 0) {
-      parts.push('已有待办: ' + existingData.todos.map(function(t) { return t.title; }).join('; '));
-    }
-    if (existingData.events && existingData.events.length > 0) {
-      parts.push('已有事件: ' + existingData.events.slice(-20).map(function(e) { return e.title; }).join('; '));
-    }
-    if (existingData.info && existingData.info.length > 0) {
-      parts.push('已有信息: ' + existingData.info.slice(-20).map(function(i) { return i.content; }).join('; '));
-    }
-    if (existingData.contacts && existingData.contacts.length > 0) {
-      parts.push('已有联系人: ' + existingData.contacts.map(function(c) { return c.name; }).join('; '));
-    }
-    if (parts.length > 0) existingSummary = '\n\n【已有数据——不要重复提取语义相同的内容】\n' + parts.join('\n') + '\n';
-  }
-
-  var personaHint = personaName ? '\n当前角色卡：' + personaName + '。仅提取对该角色长期互动确有价值且由本段对话明确支持的内容。' : '\n当前没有可确认的角色卡，四个角色分类必须返回空数组。';
-  personaHint += '\n分类补充：用户明确表达的稳定习惯、作息和长期个人事实优先归入 info，category 使用“用户习惯”或准确的事实类别，不要只塞进 contacts.attributes。';
-  return '你是一个记忆系统。请理解以下对话整体讲了什么，然后提取有价值的信息。' + personaHint + '\n\n核心原则：\n- 你是在理解一段对话后做总结，不是逐条扫描消息\n- 一段对话可能只产生0-2条有价值的提取，这是正常的\n- 过程噪音（反复调试、重复提问、工具调用细节）不要提取\n- 无效信息（"继续""好的""开始"等）完全忽略\n- 如果与已有数据语义重复，不要重复提取；同一事件措辞不同但语义相同（如“再嗨两小时”和“再嗨2小时”）也只保留一条\n- 不推断未明确表达的人格、感情或关系等级\n' + existingSummary + '\n返回纯JSON（不要markdown代码块）：\n{"events":[{"type":"activity|schedule|observation|milestone|mood","title":"标题","description":"描述","importance":"high|medium|low","date":"YYYY-MM-DD","time":"HH:MM"}],"todos":[{"title":"待办事项","description":"描述","priority":"high|medium|low","dueDate":"YYYY-MM-DD或null","completed":false}],"contacts":[{"name":"姓名","relation":"friend|family|colleague|classmate|service|other","attributes":[{"key":"属性名","value":"值"}],"context":"提到这个人的场景"}],"info":[{"category":"类别","content":"内容"}],"finance":[{"type":"expense|income","category":"类别","amount":0,"description":"描述","date":"YYYY-MM-DD"}],"menstrual":[{"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD或null","symptoms":"症状描述"}],"character":[{"title":"标题","content":"角色身份或背景事实"}],"relationship":[{"title":"标题","content":"用户与角色的明确关系事实或共同经历"}],"preference":[{"title":"标题","content":"用户或角色明确表达的偏好"}],"interaction_rule":[{"title":"标题","content":"明确约定的称呼、回复风格或互动边界"}]}\n\n提取规则：\n1. events：有记录价值的事件。activity=做了什么事；schedule=有时间安排的事；observation=发现的现象；milestone=阶段性变化；mood=情绪\n2. todos：用户明确要做的事，不是已经做完的事\n3. contacts/info/finance/menstrual：保留原生活助手语义\n4. character/relationship/preference/interaction_rule：仅在存在当前角色卡且事实明确时提取\n5. 某类没数据用空数组；同一件事不要拆成多条\n\n对话内容：\n' + dialogText;
-}
-
 // ===== 联系人合并 =====
 function mergeContacts(existing, incoming) {
   var nameMap = {};
@@ -264,8 +236,23 @@ function mergeContacts(existing, incoming) {
 }
 
 // ===== 冷却期处理（AI 两步） =====
+async function markAnalysisFailed() {
+  try {
+    var t = await readJson(TRIGGER_FILE, {});
+    await writeJson(TRIGGER_FILE, Object.assign({}, t, { analysisFailedAt: Date.now() }));
+  } catch (e) {}
+}
+
 async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, callerCardId, personaName) {
   try {
+    // 失败退避：上次分析失败在退避窗口内则跳过本次，避免反复重试白烧 token
+    try {
+      var backoffTrigger = await readJson(TRIGGER_FILE, null);
+      if (backoffTrigger && backoffTrigger.analysisFailedAt &&
+          (Date.now() - Number(backoffTrigger.analysisFailedAt || 0)) < ANALYSIS_RETRY_BACKOFF_MS) {
+        return;
+      }
+    } catch (e) {}
     // 从数据库读取对话
     var msgResult = null;
     try {
@@ -300,12 +287,12 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
 
     // === 第一步：AI 判断话题是否结束（轻量调用） ===
     var topicRaw = await callAI(buildTopicCheckPrompt(dialogText, chatIdChanged), 0);
-    if (!topicRaw) return;
+    if (!topicRaw) { await markAnalysisFailed(); return; }
 
     var topicData = null;
-    try { topicData = JSON.parse(topicRaw); } catch (e) { return; }
+    try { topicData = JSON.parse(topicRaw); } catch (e) { await markAnalysisFailed(); return; }
 
-    if (!topicData.topicEnded) {
+    if (!topicData || !topicData.topicEnded) {
       // 话题继续，不处理，等下次冷却期
       return;
     }
@@ -313,10 +300,12 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
     // === 第二步：AI 摘要 + 结构化提取（完整调用） ===
     var existingForPrompt = await readJson(EXTRACTED_FILE, { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] });
     var extractRaw = await callAI(buildExtractionPrompt(dialogText, existingForPrompt, callerCardId ? personaName : ''), 0.3);
-    if (!extractRaw) return;
+    if (!extractRaw) { await markAnalysisFailed(); return; }
 
     var extractData = null;
-    try { extractData = JSON.parse(extractRaw); } catch (e) { return; }
+    try { extractData = JSON.parse(extractRaw); } catch (e) { await markAnalysisFailed(); return; }
+    // AI 若返回字面量 null，parse 不抛异常但 extractData 为 null，直接跳过本次结算
+    if (!extractData || typeof extractData !== 'object') { await markAnalysisFailed(); return; }
 
     var now = Date.now();
 
