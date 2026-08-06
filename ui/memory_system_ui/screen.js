@@ -54,63 +54,63 @@ function Screen(ctx) {
     if (_uiRaw) uiBoot = JSON.parse(_uiRaw) || {};
   } catch(e) { uiBoot = {}; }
 
-  var tabState = ctx.useState('tab', (uiBoot.tab !== undefined ? uiBoot.tab : 0));
-  var showSearchState = ctx.useState('showSearch', false);
-  var dataState = ctx.useState('allData', cachedData);
-  var dataLoadedState = ctx.useState('allDataLoaded', false);
-  var analyzingState = ctx.useState('analyzing', false);
-  var resultState = ctx.useState('resultText', '');
-  var showCfgState = ctx.useState('showCfg', false);
-  var queryState = ctx.useState('query', (uiBoot.query !== undefined ? uiBoot.query : ''));
-  var dateStartState = ctx.useState('dateStart', (uiBoot.dateStart !== undefined ? uiBoot.dateStart : ''));
-  var dateEndState = ctx.useState('dateEnd', (uiBoot.dateEnd !== undefined ? uiBoot.dateEnd : ''));
-  var filterTypeState = ctx.useState('filterType', (uiBoot.filterType !== undefined ? uiBoot.filterType : ''));
-  var showCalState = ctx.useState('showCal', false);
-  var memoryState = ctx.useState('memories', []);
-  var memoryLoadedState = ctx.useState('memoriesLoaded', false);
-  var memoryQueryState = ctx.useState('memQuery', (uiBoot.memQuery !== undefined ? uiBoot.memQuery : ''));
-  var injectionState = ctx.useState('injectionSettings', null);
-  var injectionSavingState = ctx.useState('injectionSaving', false);
-  var injectionLimitInputState = ctx.useState('injectionLimitInput', '');
+  var tabState = ctx.useState('cms_tab', (uiBoot.tab !== undefined ? uiBoot.tab : 0));
+  var showSearchState = ctx.useState('cms_showSearch', false);
+  var dataState = ctx.useState('cms_allData', cachedData);
+  var dataLoadedState = ctx.useState('cms_allDataLoaded', false);
+  var analyzingState = ctx.useState('cms_analyzing', false);
+  var resultState = ctx.useState('cms_resultText', '');
+  var showCfgState = ctx.useState('cms_showCfg', false);
+  var queryState = ctx.useState('cms_query', (uiBoot.query !== undefined ? uiBoot.query : ''));
+  var dateStartState = ctx.useState('cms_dateStart', (uiBoot.dateStart !== undefined ? uiBoot.dateStart : ''));
+  var dateEndState = ctx.useState('cms_dateEnd', (uiBoot.dateEnd !== undefined ? uiBoot.dateEnd : ''));
+  var filterTypeState = ctx.useState('cms_filterType', (uiBoot.filterType !== undefined ? uiBoot.filterType : ''));
+  var showCalState = ctx.useState('cms_showCal', false);
+  var memoryState = ctx.useState('cms_memories', []);
+  var memoryLoadedState = ctx.useState('cms_memoriesLoaded', false);
+  var memoryQueryState = ctx.useState('cms_memQuery', (uiBoot.memQuery !== undefined ? uiBoot.memQuery : ''));
+  var injectionState = ctx.useState('cms_injectionSettings', null);
+  var injectionSavingState = ctx.useState('cms_injectionSaving', false);
+  var injectionLimitInputState = ctx.useState('cms_injectionLimitInput', '');
   // 数据备份
-  var backupBusyState = ctx.useState('backupBusy', false);
-  var backupResultState = ctx.useState('backupResult', '');
-  var backupModeState = ctx.useState('backupMode', 'merge');
-  var screenPersonaState = ctx.useState('screenPersona', null);
-  var screenCharMemoriesState = ctx.useState('screenCharMemories', []);
-var uiSaveRef = ctx.useRef('uiSaveRef', '');
-  var memoryLoadingState = ctx.useState('memLoading', false);
-  var pendingDeleteState = ctx.useState('pendingDelete', '');
+  var backupBusyState = ctx.useState('cms_backupBusy', false);
+  var backupResultState = ctx.useState('cms_backupResult', '');
+  var backupModeState = ctx.useState('cms_backupMode', 'merge');
+  var screenPersonaState = ctx.useState('cms_screenPersona', null);
+  var screenCharMemoriesState = ctx.useState('cms_screenCharMemories', []);
+var uiSaveRef = ctx.useRef('cms_uiSaveRef', '');
+  var memoryLoadingState = ctx.useState('cms_memLoading', false);
+  var pendingDeleteState = ctx.useState('cms_pendingDelete', '');
   // 联系人 Tab：选中联系人同步恢复
-  var selContactState = ctx.useState('selContact', (uiBoot.selContact !== undefined ? uiBoot.selContact : -1));
+  var selContactState = ctx.useState('cms_selContact', (uiBoot.selContact !== undefined ? uiBoot.selContact : -1));
   // 消息Tab专用状态
-  var chatsState = ctx.useState('msgs_chats', []);
+  var chatsState = ctx.useState('cms_msgs_chats', []);
   // 消息Tab：选中的对话同步恢复（注意 chatDetail 不持久化——它是网络请求结果，下次进入会重新加载）
-  var selectedChatState = ctx.useState('msgs_selectedChat', (uiBoot.selectedChatId ? { chatId: uiBoot.selectedChatId } : null));
-  var chatDetailState = ctx.useState('msgs_chatDetail', null);
-  var loadingChatsState = ctx.useState('msgs_loadingChats', false);
-  var loadingDetailState = ctx.useState('msgs_loadingDetail', false);
-  var msgQueryState = ctx.useState('msgs_query', (uiBoot.msgQuery !== undefined ? uiBoot.msgQuery : ''));
-  var hasMoreState = ctx.useState('msgs_hasMore', true);
+  var selectedChatState = ctx.useState('cms_msgs_selectedChat', (uiBoot.selectedChatId ? { chatId: uiBoot.selectedChatId } : null));
+  var chatDetailState = ctx.useState('cms_msgs_chatDetail', null);
+  var loadingChatsState = ctx.useState('cms_msgs_loadingChats', false);
+  var loadingDetailState = ctx.useState('cms_msgs_loadingDetail', false);
+  var msgQueryState = ctx.useState('cms_msgs_query', (uiBoot.msgQuery !== undefined ? uiBoot.msgQuery : ''));
+  var hasMoreState = ctx.useState('cms_msgs_hasMore', true);
   // 消息Tab：加载偏移同步恢复，避免回到列表头
-var offsetState = ctx.useState('msgs_offset', (uiBoot.msgOffset !== undefined ? uiBoot.msgOffset : 0));
-var analyzedChatsState = ctx.useState('msgs_analyzedChats', []);
-var selectedMessagesState = ctx.useState('msgs_selectedMessages', []); // 多选的消息索引
+var offsetState = ctx.useState('cms_msgs_offset', (uiBoot.msgOffset !== undefined ? uiBoot.msgOffset : 0));
+var analyzedChatsState = ctx.useState('cms_msgs_analyzedChats', []);
+var selectedMessagesState = ctx.useState('cms_msgs_selectedMessages', []); // 多选的消息索引
 // 后端真实对话总数（来自 list_chats_brief 的 data.totalCount），不会因为前端追加而变化
 // 这个数字代表"你一共有多少对话"，不是"已拉取多少"——按用户原话："我需要看到实际拉取数量"
-var totalChatsState = ctx.useState('msgs_totalChats', (uiBoot.totalChats !== undefined ? uiBoot.totalChats : 0));
+var totalChatsState = ctx.useState('cms_msgs_totalChats', (uiBoot.totalChats !== undefined ? uiBoot.totalChats : 0));
 
-  var cfgEndpoint = ctx.useState('cfgEndpoint', ctx.getEnv('MEMORY_SYSTEM_ENDPOINT') || '');
-  var cfgKey = ctx.useState('cfgKey', ctx.getEnv('MEMORY_SYSTEM_KEY') || '');
-  var cfgModel = ctx.useState('cfgModel', ctx.getEnv('MEMORY_SYSTEM_MODEL') || 'gpt-4o-mini');
+  var cfgEndpoint = ctx.useState('cms_cfgEndpoint', ctx.getEnv('MEMORY_SYSTEM_ENDPOINT') || '');
+  var cfgKey = ctx.useState('cms_cfgKey', ctx.getEnv('MEMORY_SYSTEM_KEY') || '');
+  var cfgModel = ctx.useState('cms_cfgModel', ctx.getEnv('MEMORY_SYSTEM_MODEL') || 'gpt-4o-mini');
   var endpoint = cfgEndpoint[0], setEndpoint = cfgEndpoint[1];
   var apiKey = cfgKey[0], setApiKey = cfgKey[1];
   var model = cfgModel[0], setModel = cfgModel[1];
-var initRef = ctx.useRef('init', false);
-var triggerPollRef = ctx.useRef('triggerPoll', 0);
-var dataLoadScheduledRef = ctx.useRef('dataLoadScheduled', false);
-var memoryLoadScheduledRef = ctx.useRef('memoryLoadScheduled', false);
-var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
+var initRef = ctx.useRef('cms_init', false);
+var triggerPollRef = ctx.useRef('cms_triggerPoll', 0);
+var dataLoadScheduledRef = ctx.useRef('cms_dataLoadScheduled', false);
+var memoryLoadScheduledRef = ctx.useRef('cms_memoryLoadScheduled', false);
+var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
   if (!__bootTrig && !initRef.current) {
  initRef.current = true; __bootTrig = true;
  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
@@ -200,7 +200,7 @@ var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
   }
 
   // ===== 初始化时加载已分析对话列表（用于消息Tab标记）=====
-  var analyzedChatsInitRef = ctx.useRef('analyzedChatsInit', false);
+  var analyzedChatsInitRef = ctx.useRef('cms_analyzedChatsInit', false);
   if (currentTab === 99 && !analyzedChatsInitRef.current) {
     analyzedChatsInitRef.current = true;
     (async function() {
@@ -228,7 +228,7 @@ if (_lm) lastMsgsLoadAt = parseInt(_lm, 10) || 0;
 } catch(__e) {}
 var nowMs = Date.now();
 var isFreshEnter = (lastMsgsLoadAt === 0) || ((nowMs - lastMsgsLoadAt) > 3000);
-var msgsChatsEnterRef = ctx.useRef('msgsChatsEnter', false);
+var msgsChatsEnterRef = ctx.useRef('cms_msgsChatsEnter', false);
 // 如果 env 判断是新进入，重置 ref
 if (isFreshEnter) msgsChatsEnterRef.current = false;
 if (currentTab === 99 && !msgsChatsEnterRef.current) {
@@ -435,7 +435,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     injectionSavingState[1](false);
   }
 
-  var injectionLimitTimerRef = ctx.useRef('injectionLimitTimer', null);
+  var injectionLimitTimerRef = ctx.useRef('cms_injectionLimitTimer', null);
 
   function onInjectionLimitChange(value) {
     // 只接受纯数字，限制 2 位，避免中间态
@@ -577,8 +577,8 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
   var dateEnd = dateEndState[0] || '';
   var filterType = filterTypeState[0] || '';
   var showCal = showCalState[0];
-  var calYearState = ctx.useState('calY', dateStart ? parseInt(dateStart.substring(0,4)) : new Date().getFullYear());
-  var calMonthState = ctx.useState('calM', dateStart ? parseInt(dateStart.substring(5,7)) : new Date().getMonth() + 1);
+  var calYearState = ctx.useState('cms_calY', dateStart ? parseInt(dateStart.substring(0,4)) : new Date().getFullYear());
+  var calMonthState = ctx.useState('cms_calM', dateStart ? parseInt(dateStart.substring(5,7)) : new Date().getMonth() + 1);
   var calYear = calYearState[0];
   var calMonth = calMonthState[0];
 

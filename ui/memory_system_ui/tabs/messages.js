@@ -97,8 +97,8 @@ if (chatsState.length === 0 && !loadingChatsState && !msgsLoadedByEnter) {
 // 每次调用都返回数据库里前 limit 条同样的对话。
 // 因此"加载更多"实际只是再拉一次然后做去重合并，不会真正分页。
 // 真正的进度通过 list_chats_brief 返回的 totalCount 显示给用户。
-var loadMoreRef = ctx.useRef('loadMore', false);
-var loadMoreGuardRef = ctx.useRef('lastLoadedAt', 0);
+var loadMoreRef = ctx.useRef('cms_loadMore', false);
+var loadMoreGuardRef = ctx.useRef('cms_lastLoadedAt', 0);
 function handleLoadMore() {
 if (loadingChatsState || !hasMoreState || searchQuery) return;
 if (loadMoreRef.current) return;

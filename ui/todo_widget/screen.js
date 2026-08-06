@@ -9,8 +9,8 @@ function Screen(ctx) {
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
   // 状态
-  var dataState = ctx.useState('wdata', null);
-  var loadedRef = ctx.useRef('wloaded', false);
+  var dataState = ctx.useState('cms_wdata', null);
+  var loadedRef = ctx.useRef('cms_wloaded', false);
 
   if (!loadedRef.current) {
     loadedRef.current = true;

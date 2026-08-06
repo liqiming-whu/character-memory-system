@@ -20,7 +20,7 @@ function render(ctx, personaFromScreen, memoriesFromScreen) {
 var __charPropsLock = false;
 var __charMemPropsLock = false;
 var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary];
-  var personaState = ctx.useState('character_persona_context', {
+  var personaState = ctx.useState('cms_character_persona_context', {
     id: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID') || ''),
     name: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME') || ''),
     type: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE') || '')
@@ -33,21 +33,21 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   var personaId = String((personaState[0] && personaState[0].id) || '');
   var personaName = String((personaState[0] && personaState[0].name) || '');
   var personaType = String((personaState[0] && personaState[0].type) || '');
-  var memoriesState = ctx.useState('character_memories', []);
+  var memoriesState = ctx.useState('cms_character_memories', []);
   // 外部传入的角色记忆优先：screen 加载后传入，避免子组件自触发不可靠导致记忆缺失
   if (!__charMemPropsLock && Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) {
     __charMemPropsLock = true;
     memoriesState[1](memoriesFromScreen);
   }
-  var loadingState = ctx.useState('character_loading', false);
-  var loadedForRef = ctx.useRef('character_loaded_for', '');
-  var categoryState = ctx.useState('character_category', 'relationship');
-  var titleState = ctx.useState('character_title', '');
-  var contentState = ctx.useState('character_content', '');
-  var resultState = ctx.useState('character_result', '');
-  var contextLoadingRef = ctx.useRef('character_context_loading', false);
-  var retryAtRef = ctx.useRef('character_retry_at', 0);
-  var autoLoadAtRef = ctx.useRef('character_auto_load_at', 0);
+  var loadingState = ctx.useState('cms_character_loading', false);
+  var loadedForRef = ctx.useRef('cms_character_loaded_for', '');
+  var categoryState = ctx.useState('cms_character_category', 'relationship');
+  var titleState = ctx.useState('cms_character_title', '');
+  var contentState = ctx.useState('cms_character_content', '');
+  var resultState = ctx.useState('cms_character_result', '');
+  var contextLoadingRef = ctx.useRef('cms_character_context_loading', false);
+  var retryAtRef = ctx.useRef('cms_character_retry_at', 0);
+  var autoLoadAtRef = ctx.useRef('cms_character_auto_load_at', 0);
 
   async function callToolWithTimeout(name, params, timeoutMs) {
     var timer = null;

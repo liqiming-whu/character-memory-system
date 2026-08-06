@@ -9,11 +9,11 @@ function Screen(ctx) {
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
   // 状态
-  var dataState = ctx.useState('cdata', null);
-  var queryState = ctx.useState('cquery', '');
-  var groupFilterState = ctx.useState('cgroup', '');
-  var selectedContactState = ctx.useState('csel', -1);
-  var initRef = ctx.useRef('cinit', false);
+  var dataState = ctx.useState('cms_cdata', null);
+  var queryState = ctx.useState('cms_cquery', '');
+  var groupFilterState = ctx.useState('cms_cgroup', '');
+  var selectedContactState = ctx.useState('cms_csel', -1);
+  var initRef = ctx.useRef('cms_cinit', false);
 
   // 图标映射（颜色走 Material token）
   var relationMap = {
