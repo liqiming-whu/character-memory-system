@@ -347,6 +347,7 @@ exports.load_saved_data = async function () {
         })();
         var uiState = await readUiState();
         var injectionSettings = await readInjectionSettings();
+        dbgToolFire('[' + new Date().toISOString() + '] [lifeDataReturn] bytes=' + JSON.stringify({ success: true, extracted: ext }).length + ' info=' + (ext.info ? ext.info.length : -1) + ' ev=' + (ext.events ? ext.events.length : -1) + ' ct=' + (ext.contacts ? ext.contacts.length : -1) + ' td=' + (ext.todos ? ext.todos.length : -1) + ' fn=' + (ext.finance ? ext.finance.length : -1) + ' ms=' + (ext.menstrual ? ext.menstrual.length : -1) + '\n');
         complete({ success: true, extracted: ext, uiState: uiState, injection: injectionSettings });
     } catch (e) {
         complete({ success: false, message: e.message || String(e) });
@@ -365,6 +366,7 @@ exports.reconcile_native_memory = async function (params) {
 exports.get_persona_context = async function () {
     try {
         var context = await readJson(PERSONA_FILE, { version: 1, type: '', id: '', name: '', chatId: '', updatedAt: '' });
+        dbgToolFire('[' + new Date().toISOString() + '] [personaReturn] bytes=' + JSON.stringify({ success: true, persona: context }).length + ' has=' + (context && context.id ? 1 : 0) + '\n');
         complete({ success: true, persona: context });
     } catch (e) {
         complete({ success: false, message: e.message || String(e) });
@@ -1146,6 +1148,7 @@ exports.load_memories = async function (params) {
             return b.score - a.score;
         });
         memories = memories.slice(0, limit);
+        dbgToolFire('[' + new Date().toISOString() + '] [loadMemReturn] bytes=' + JSON.stringify({ success: true, memories: memories, total: memories.length }).length + ' count=' + memories.length + ' scope=' + scope + '\n');
         complete({ success: true, memories: memories, total: memories.length, scope: scope, query: fullQuery ? '*' : rawQuery });
     } catch (e) {
         complete({ success: false, message: '出错：' + (e.message || String(e)) });
@@ -1459,6 +1462,25 @@ async function readFileText(path) {
         if (res && typeof res === 'string') return res;
     } catch (e) {}
     return '';
+}
+
+var DBG_TOOL_LOG = '/sdcard/Download/Operit/character_memory_system_data/dbg_tool.log';
+// v1.8.1：工具出口探针——fire-and-forget 追加写日志（不阻塞 complete）
+async function dbgToolAppend(line) {
+  try {
+    var prev = '';
+    try {
+      var r = await Tools.Files.read(DBG_TOOL_LOG);
+      if (r && typeof r.content === 'string') prev = r.content;
+      else if (r && typeof r === 'string') prev = r;
+    } catch (e) {}
+    var merged = (prev || '') + line;
+    if (merged.length > 30000) merged = merged.slice(-30000);
+    await Tools.Files.write(DBG_TOOL_LOG, merged, false, 'android');
+  } catch (e) { try { console.log('dbgToolAppend failed', String(e)); } catch (_) {} }
+}
+function dbgToolFire(line) {
+  try { dbgToolAppend(line).catch(function() {}); } catch (e) {}
 }
 
 async function writeFileText(path, text) {

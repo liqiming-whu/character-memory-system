@@ -33,6 +33,8 @@ const TAB_REGISTRY = [
   { id: 5, icon: 'settings',      label: '设置' },
 ];
 
+function _probeBytes(v) { try { return JSON.stringify(v).length; } catch (e) { return -1; } }
+function _probeCount(v) { try { return (v && v.length) ? v.length : 0; } catch (e) { return -1; } }
 function dbgUi(stage, msg) {
   try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [" + stage + "] " + msg + "\n", true, "android"); } catch (e) {}
 }
@@ -288,7 +290,7 @@ loadingChatsState[1](false);
     try {
       var raw = await ctx.callTool('memory_system:load_saved_data', {});
       var r = parseResult(raw);
-      dbgUi("loadData", "resp success=" + !!(r && r.success) + " hasExt=" + !!(r && r.extracted) + " hasAny=" + !!((r && r.extracted) && ((r.extracted.events && r.extracted.events.length) || (r.extracted.contacts && r.extracted.contacts.length) || (r.extracted.info && r.extracted.info.length) || (r.extracted.finance && r.extracted.finance.length) || (r.extracted.todos && r.extracted.todos.length) || (r.extracted.menstrual && r.extracted.menstrual.length))));
+      dbgUi("loadData", "resp success=" + !!(r && r.success) + " hasExt=" + !!(r && r.extracted) + " hasAny=" + !!((r && r.extracted) && ((r.extracted.events && r.extracted.events.length) || (r.extracted.contacts && r.extracted.contacts.length) || (r.extracted.info && r.extracted.info.length) || (r.extracted.finance && r.extracted.finance.length) || (r.extracted.todos && r.extracted.todos.length) || (r.extracted.menstrual && r.extracted.menstrual.length))) + " info=" + _probeCount(r && r.extracted && r.extracted.info) + " ev=" + _probeCount(r && r.extracted && r.extracted.events) + " ct=" + _probeCount(r && r.extracted && r.extracted.contacts) + " td=" + _probeCount(r && r.extracted && r.extracted.todos) + " fn=" + _probeCount(r && r.extracted && r.extracted.finance) + " ms=" + _probeCount(r && r.extracted && r.extracted.menstrual) + " bytes=" + _probeBytes(r));
       var __ext = (r && r.success && r.extracted) ? r.extracted : null;
       var __hasAny = __ext && ((__ext.events && __ext.events.length) || (__ext.contacts && __ext.contacts.length) || (__ext.info && __ext.info.length) || (__ext.finance && __ext.finance.length) || (__ext.todos && __ext.todos.length) || (__ext.menstrual && __ext.menstrual.length));
       // 空壳响应守卫（cme 实锤：新模块早期工具调用约 2/3 概率返回 success=true 但 extracted 为空）
@@ -373,7 +375,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
             caller_card_id: String(p.id)
           });
           var mResult = parseResult(mRaw);
-          dbgUi("loadMem", "char resp success=" + !!(mResult && mResult.success) + " count=" + ((mResult && mResult.memories) ? mResult.memories.length : -1) + " caller=" + String(p.id));
+          dbgUi("loadMem", "char resp success=" + !!(mResult && mResult.success) + " count=" + ((mResult && mResult.memories) ? mResult.memories.length : -1) + " bytes=" + _probeBytes(mResult) + " caller=" + String(p.id));
           if (mResult && mResult.success && mResult.memories) {
             screenCharMemoriesState[1](mResult.memories);
             try { ctx.setEnv('CACHED_CHAR_MEMORIES', JSON.stringify(mResult.memories)); } catch (e) {}
@@ -398,7 +400,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         caller_card_id: personaId || undefined
       });
       var result = parseResult(raw);
-      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
+      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " bytes=" + _probeBytes(result) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
         try { ctx.setEnv('CACHED_KNOWLEDGE_MEMORIES', JSON.stringify(result.memories)); } catch (e) {}
