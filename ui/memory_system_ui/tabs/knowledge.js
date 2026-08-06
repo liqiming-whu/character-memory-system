@@ -50,7 +50,7 @@ function render(ctx, allData, states, actions, memoryState) {
       UI.Row({ verticalAlignment: 'center' }, [
         UI.Icon({ name: 'info', tint: colors.error, size: 16 }),
         UI.Spacer({ width: 4 }),
-        UI.Text({ text: '信息 ' + filteredInfo.length, style: 'labelMedium', color: colors.error, fontWeight: 'bold' }),
+        UI.Text({ text: '信息 ' + (states.dataLoading ? '--' : filteredInfo.length), style: 'labelMedium', color: colors.error, fontWeight: 'bold' }),  // v1.7.9 加载中不显示误导性 0
       ]),
     ]),
     UI.Surface({ shape: { cornerRadius: 10 }, containerColor: colors.primaryContainer, padding: { left: 12, right: 12, top: 6, bottom: 6 } }, [

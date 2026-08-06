@@ -992,6 +992,15 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
           memoryState[1](__k2);
         }
       }
+      var __dC2 = ctx.getEnv('CACHED_ALL_DATA') || '';
+      if (__dC2) {
+        var __d2 = JSON.parse(__dC2);
+        var __dHas = __d2 && ((__d2.info && __d2.info.length) || (__d2.events && __d2.events.length) || (__d2.contacts && __d2.contacts.length) || (__d2.finance && __d2.finance.length) || (__d2.todos && __d2.todos.length) || (__d2.menstrual && __d2.menstrual.length));
+        if (__dHas && (!dataState[0] || !dataState[0].info || dataState[0].info.length === 0)) {
+          dataState[1](__d2);
+          dataLoadingState[1](false);
+        }
+      }
     } catch (e) {}
     await loadData();
     dbgUi("onLoad", "loadData done");
