@@ -17,6 +17,10 @@ const characterTab = require("./tabs/character");
 var __loadDataFail = 0;
 var __personaFail = 0;
 var __memFail = 0;
+var __bootTrig = false;
+var __bootDataLoad = false;
+var __bootMemLoad = false;
+var __bootCharLoad = false;
 const TAB_REGISTRY = [
   { id: 0, icon: 'dashboard',     label: '概览' },
   { id: 1, icon: 'checklist',     label: '待办' },
@@ -26,7 +30,11 @@ const TAB_REGISTRY = [
   { id: 5, icon: 'settings',      label: '设置' },
 ];
 
+function dbgUi(stage, msg) {
+  try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [" + stage + "] " + msg + "\n", true, "android"); } catch (e) {}
+}
 function Screen(ctx) {
+  dbgUi("mount", "Screen enter");
   var UI = ctx.UI;
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
@@ -103,8 +111,8 @@ var triggerPollRef = ctx.useRef('triggerPoll', 0);
 var dataLoadScheduledRef = ctx.useRef('dataLoadScheduled', false);
 var memoryLoadScheduledRef = ctx.useRef('memoryLoadScheduled', false);
 var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
-  if (!initRef.current) {
- initRef.current = true;
+  if (!__bootTrig && !initRef.current) {
+ initRef.current = true; __bootTrig = true;
  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
  (async function() {
    try {
@@ -166,7 +174,7 @@ var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
   // 首次状态为空时读取一次；后续由根节点 onLoad、分析完成或用户操作明确刷新。
   // 用 state（dataLoadedState）作唯一权威：只要数据未加载就重新调度，避免 useRef 在
   // 快速切换实例复用时残留 true 导致加载永久跳过。
-  if (!dataLoadedState[0] && !dataLoadScheduledRef.current) {
+  if (!__bootDataLoad && !dataLoadedState[0] && !dataLoadScheduledRef.current) { __bootDataLoad = true; dbgUi("sched", "dataLoad trigger");
     dataLoadScheduledRef.current = true;
     setTimeout(function() {
       loadData().then(function() { dataLoadedState[1](true); })
@@ -175,7 +183,7 @@ var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
   }
   // ===== 初始化时加载记忆 =====
   var currentTab = tabState[0];
-  if ((currentTab === 3) && !memoryLoadedState[0] && !memoryLoadingState[0] && !memoryLoadScheduledRef.current) {
+  if (!__bootMemLoad && (currentTab === 3) && !memoryLoadedState[0] && !memoryLoadingState[0] && !memoryLoadScheduledRef.current) { __bootMemLoad = true;
     memoryLoadScheduledRef.current = true;
     setTimeout(function() {
       loadKnowledgeMemories().finally(function() { memoryLoadScheduledRef.current = false; });
@@ -184,7 +192,7 @@ var characterLoadScheduledRef = ctx.useRef('characterLoadScheduled', false);
 
   // ===== 角色页：进入时自动加载角色上下文与记忆（与知识页同款 setTimeout 模式）=====
   // 每次进入角色 tab 都重新加载，不因之前加载过而跳过；ref 仅防同帧重复。
-  if (currentTab === 3 && !characterLoadScheduledRef.current) {
+  if (!__bootCharLoad && currentTab === 3 && !characterLoadScheduledRef.current) { __bootCharLoad = true;
     characterLoadScheduledRef.current = true;
     setTimeout(function() {
       loadScreenPersona().finally(function() { characterLoadScheduledRef.current = false; });
@@ -268,6 +276,7 @@ loadingChatsState[1](false);
     try {
       var raw = await ctx.callTool('memory_system:load_saved_data', {});
       var r = parseResult(raw);
+      dbgUi("loadData", "resp success=" + !!(r && r.success) + " hasExt=" + !!(r && r.extracted) + " hasAny=" + !!((r && r.extracted) && ((r.extracted.events && r.extracted.events.length) || (r.extracted.contacts && r.extracted.contacts.length) || (r.extracted.info && r.extracted.info.length) || (r.extracted.finance && r.extracted.finance.length) || (r.extracted.todos && r.extracted.todos.length) || (r.extracted.menstrual && r.extracted.menstrual.length))));
       var __ext = (r && r.success && r.extracted) ? r.extracted : null;
       var __hasAny = __ext && ((__ext.events && __ext.events.length) || (__ext.contacts && __ext.contacts.length) || (__ext.info && __ext.info.length) || (__ext.finance && __ext.finance.length) || (__ext.todos && __ext.todos.length) || (__ext.menstrual && __ext.menstrual.length));
       // 空壳响应守卫（cme 实锤：新模块早期工具调用约 2/3 概率返回 success=true 但 extracted 为空）
@@ -297,7 +306,7 @@ loadingChatsState[1](false);
             }
             if (r.uiState && r.uiState.data) {
                 var saved = r.uiState.data;
-                if (saved.tab !== undefined) tabState[1](saved.tab);
+                if (saved.tab !== undefined && tabState[0] !== saved.tab) tabState[1](saved.tab);
                 if (saved.query !== undefined) queryState[1](saved.query);
                 if (saved.filterType !== undefined) filterTypeState[1](saved.filterType);
                 if (saved.dateStart !== undefined) dateStartState[1](saved.dateStart);
@@ -314,7 +323,7 @@ loadingChatsState[1](false);
           }));
         } catch(ex) {}
       }
-    } catch (e) {}
+    } catch (e) { __loadDataFail += 1; if (__loadDataFail < 5) setTimeout(function() { loadData(); }, 800); dbgUi("loadData", "exception retry " + __loadDataFail); }
   }
 
   async function loadScreenPersona() {
@@ -323,6 +332,7 @@ loadingChatsState[1](false);
     try {
       var pRaw = await ctx.callTool('memory_system:get_persona_context', {});
       var pResult = parseResult(pRaw);
+      dbgUi("loadPersona", "resp success=" + !!(pResult && pResult.success) + " persona=" + ((pResult && pResult.persona && (pResult.persona.id || pResult.persona.name)) ? "HAS" : "EMPTY"));
       var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : null;
       // 空壳响应守卫：success=true 但 persona 为空（chars=0）→ 未识别角色卡元凶
       // 已有 persona 保留旧值不清空；无旧值自驱重试（最多5次）
@@ -338,7 +348,8 @@ loadingChatsState[1](false);
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID', String(p.id || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME', String(p.name || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE', String(p.type || ''));
-      screenPersonaState[1]({ id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') });
+      var __curP2 = screenPersonaState[0];
+if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.name || '') || __curP2.type !== String(p.type || '')) screenPersonaState[1]({ id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') });
       if (p.id) {
         try {
           var mRaw = await ctx.callTool('memory_system:load_memories', {
@@ -353,7 +364,7 @@ loadingChatsState[1](false);
           }
         } catch (e) {}
       }
-    } catch (e) {}
+    } catch (e) { __personaFail += 1; if (__personaFail < 5) setTimeout(function() { loadScreenPersona(); }, 800); dbgUi("loadPersona", "exception retry " + __personaFail); }
   }
 
   async function loadKnowledgeMemories() {
@@ -368,6 +379,7 @@ loadingChatsState[1](false);
         caller_card_id: personaId || undefined
       });
       var result = parseResult(raw);
+      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1));
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
         __memFail = 0;
@@ -791,7 +803,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   for (var ti = 0; ti < TAB_REGISTRY.length; ti++) {
     (function(t) {
       var isSel = currentTab === t.id;
-      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: async function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); if (t.id === 3 || t.id === 4) { await new Promise(function(__res) { setTimeout(__res, 600); }); } } }, [
+      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: async function() { dbgUi("tab", "switch to " + t.id); tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); if (t.id === 3 || t.id === 4) { await new Promise(function(__res) { setTimeout(__res, 600); }); } } }, [
         UI.Column({ fillMaxWidth: true, fillMaxHeight: true, horizontalAlignment: 'center', verticalArrangement: 'center' }, [
           UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
             UI.Icon({ name: t.icon, tint: isSel ? colors.primary : colors.outline, size: 21 }),
@@ -930,9 +942,13 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   }
 
   // ===== 返回 =====
+  dbgUi("mount2", "render complete");
   return UI.Column({ fillMaxSize: true, padding: 8, onLoad: async function() {
+    dbgUi("onLoad", "enter");
     await loadData();
+    dbgUi("onLoad", "loadData done");
     await loadScreenPersona();
+    dbgUi("onLoad", "loadScreenPersona done");
   } }, [
     headerCard,
     UI.Spacer({ height: 6 }),

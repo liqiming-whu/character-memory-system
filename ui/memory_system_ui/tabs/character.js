@@ -16,14 +16,18 @@ function render(ctx, personaFromScreen, memoriesFromScreen) {
   var UI = ctx.UI;
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
   // 分类 chip 用 primary/tertiary 交替强调
-  var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary];
+  var __charAutoLoadOnce = false;
+var __charPropsLock = false;
+var __charMemPropsLock = false;
+var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary];
   var personaState = ctx.useState('character_persona_context', {
     id: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID') || ''),
     name: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME') || ''),
     type: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE') || '')
   });
   // 外部传入的角色上下文优先：screen 根 onLoad 加载后传入，避免依赖子组件副作用
-  if (personaFromScreen && (!personaState[0] || !personaState[0].id) && personaFromScreen.id) {
+  if (!__charPropsLock && personaFromScreen && (!personaState[0] || !personaState[0].id) && personaFromScreen.id) {
+    __charPropsLock = true;
     personaState[1](personaFromScreen);
   }
   var personaId = String((personaState[0] && personaState[0].id) || '');
@@ -31,7 +35,8 @@ function render(ctx, personaFromScreen, memoriesFromScreen) {
   var personaType = String((personaState[0] && personaState[0].type) || '');
   var memoriesState = ctx.useState('character_memories', []);
   // 外部传入的角色记忆优先：screen 加载后传入，避免子组件自触发不可靠导致记忆缺失
-  if (Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) {
+  if (!__charMemPropsLock && Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) {
+    __charMemPropsLock = true;
     memoriesState[1](memoriesFromScreen);
   }
   var loadingState = ctx.useState('character_loading', false);
@@ -159,7 +164,7 @@ function render(ctx, personaFromScreen, memoriesFromScreen) {
   }
   // 渲染时直接触发自动加载：不用 setTimeout，避免依赖事件循环；
   // loadOnEnter 异步不阻塞渲染，loadContext 幂等（防重入 + 节流 + 失败退避）。
-  loadOnEnter();
+  if (!__charAutoLoadOnce) { __charAutoLoadOnce = true; loadOnEnter(); }
 
   if (!personaId) {
     return [UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.errorContainer, padding: 18 }, [
