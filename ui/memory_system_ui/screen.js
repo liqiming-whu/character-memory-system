@@ -14,6 +14,7 @@ const messagesTab = require("./tabs/messages"); // 预留：消息Tab
 const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
+var __mountSeq = 0;  // v1.7.1 探针：mount 序号（模块重载会重置）
 var __charRefreshFn = null;  // v1.7.0：character 操作回流刷新（首次渲染绑定）
 var __loadDataFail = 0;
 var __personaFail = 0;
@@ -35,7 +36,7 @@ function dbgUi(stage, msg) {
   try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [" + stage + "] " + msg + "\n", true, "android"); } catch (e) {}
 }
 function Screen(ctx) {
-  dbgUi("mount", "Screen enter");
+  __mountSeq += 1; dbgUi("mount", "Screen enter #" + __mountSeq);
   var UI = ctx.UI;
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
 
@@ -119,7 +120,7 @@ var dataLoadScheduledRef = ctx.useRef('cms_dataLoadScheduled', false);
 var memoryLoadScheduledRef = ctx.useRef('cms_memoryLoadScheduled', false);
 var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
   if (!__bootTrig && !initRef.current) {
- initRef.current = true; __bootTrig = true;
+ initRef.current = true; __bootTrig = true; dbgUi("boot", "trig once");
  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
  (async function() {
    try {
@@ -339,7 +340,7 @@ loadingChatsState[1](false);
     try {
       var pRaw = await ctx.callTool('memory_system:get_persona_context', {});
       var pResult = parseResult(pRaw);
-      dbgUi("loadPersona", "resp success=" + !!(pResult && pResult.success) + " persona=" + ((pResult && pResult.persona && (pResult.persona.id || pResult.persona.name)) ? "HAS" : "EMPTY"));
+      dbgUi("loadPersona", "resp success=" + !!(pResult && pResult.success) + " persona=" + ((pResult && pResult.persona && (pResult.persona.id || pResult.persona.name)) ? ("HAS:" + pResult.persona.id + ":" + pResult.persona.name) : "EMPTY"));
       var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : null;
       // 空壳响应守卫：success=true 但 persona 为空（chars=0）→ 未识别角色卡元凶
       // 已有 persona 保留旧值不清空；无旧值自驱重试（最多5次）
@@ -388,7 +389,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         caller_card_id: personaId || undefined
       });
       var result = parseResult(raw);
-      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1));
+      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (params && params.caller_card_id ? params.caller_card_id : 'none'));
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
         __memFail = 0;
@@ -954,6 +955,25 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   dbgUi("mount2", "render complete");
   return UI.Column({ fillMaxSize: true, padding: 8, onLoad: async function() {
     dbgUi("onLoad", "enter");
+    try { var __pC = ctx.getEnv('CACHED_PERSONA') || ''; var __mC = ctx.getEnv('CACHED_CHAR_MEMORIES') || ''; dbgUi("cache", "persona=" + (__pC ? 'hit(' + __pC.length + 'B)' : 'miss') + " mem=" + (__mC ? 'hit(' + __mC.length + 'B)' : 'miss')); } catch (e) { dbgUi("cache", "err: " + e.message); }
+    // v1.7.2：env 就绪后补缓存首帧（首帧渲染时 env 可能未就绪导致空加载）
+    try {
+      var __pC2 = ctx.getEnv('CACHED_PERSONA') || '';
+      if (__pC2) {
+        var __p2 = JSON.parse(__pC2);
+        if (__p2 && (__p2.id || __p2.name)) {
+          if (!screenPersonaState[0]) screenPersonaState[1]({ id: String(__p2.id || ''), name: String(__p2.name || ''), type: String(__p2.type || '') });
+          if (!characterReadyState[0]) characterReadyState[1](true);
+        }
+      }
+      var __mC2 = ctx.getEnv('CACHED_CHAR_MEMORIES') || '';
+      if (__mC2) {
+        var __m2 = JSON.parse(__mC2);
+        if (Array.isArray(__m2) && __m2.length && (!screenCharMemoriesState[0] || screenCharMemoriesState[0].length === 0)) {
+          screenCharMemoriesState[1](__m2);
+        }
+      }
+    } catch (e) {}
     await loadData();
     dbgUi("onLoad", "loadData done");
     await loadScreenPersona();
