@@ -45,7 +45,7 @@ function __serialCtx(ctx, fn) {
 function _probeBytes(v) { try { return JSON.stringify(v).length; } catch (e) { return -1; } }
 function _probeCount(v) { try { return (v && v.length) ? v.length : 0; } catch (e) { return -1; } }
 function dbgUi(stage, msg) {
-  try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [" + stage + "] " + msg + "\n", true, "android"); } catch (e) {}
+  // v1.8.4：探针已关闭（bridge 战役收官，不再写 dbg_ui.log）
 }
 function Screen(ctx) {
   __mountSeq += 1; dbgUi("mount", "Screen enter #" + __mountSeq);

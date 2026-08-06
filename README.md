@@ -1,10 +1,32 @@
 # Character Memory System
 
+## 当前版本：v1.8.4（Architecture Fix Release）
+
+本次发布确定了整个 CMS/CME 系列插件在 Operit 上的正确开发范式，修复三大架构级问题：
+
+1. **UI 卡死（v1.6.9 治本）**：render 阶段调用 state setter 导致无限重建循环（mount 风暴）→ 铁律：render 必须纯函数，数据同步只发生在生命周期/action 阶段。
+2. **空加载（v1.7.x 全面根治）**："有 UI 没条目"——首帧缓存时序 / persona 初始化链 / 数据入口不统一 / 工具响应空壳，四层防御：setEnv 首帧缓存 → 空壳守卫（失败不覆盖旧数据）→ 指数退避重试（10 次上限）→ 加载态（-- 与"正在读取"）。
+3. **数据通道错配（v1.8.x 根治）**：Operit bridge 并发工具调用响应错配（工具出口正确、前端入口收到别的调用响应）→ 全局串行队列 `__serialCtx`（挂 ctx 跨模块共享，全文件所有 callTool 统一入队）+ 响应字段守卫（success=true 但缺关键字段 → 重试不当成功）。
+
+完整战役报告见 `docs/`：
+
+- `CMS_v1.6.x_卡死问题完整排查记录.md`
+- `CMS_v1.7.3_探针故障复盘与开发规范.md`
+- `CMS_v1.7x_空加载问题完整分析报告.md`
+- `CMS_v1.8x_数据通道问题与当前状态报告.md`
+
+开发范式四条铁律（已写入 TOOLPKG_DEVELOPMENT.md）：
+
+1. render 禁止副作用（Compose DSL 渲染期 setState = 无限循环）
+2. 模块级变量不可靠（每次挂载重新 require，不能做 boot 锁/缓存/防重入）
+3. debug 不能影响业务（探针参数表达式先于函数体求值，dbgUi 内部 try 救不了）
+4. tool 调用必须统一串行（Operit bridge 并发响应会错配，禁止 Promise.all 并发依赖返回顺序）
+
 Character Memory System 是基于 Operit ToolPkg 和原生 Memory API 的角色长期记忆扩展。项目在保留个人 AI 助手能力的基础上，为当前角色卡增加隔离的长期记忆、召回和 Prompt 注入。
 
-当前版本：`1.5.8`。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
+当前版本：`1.8.4`（架构修复版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
 
-当前测试包：`dist/com-operit-character-memory-system-v1.5.8.toolpkg`。
+当前测试包：`com-operit-character-memory-system-v1.8.4.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
 
 > ⚠️ **v1.5.7 是支持「同时注入 memory_system + Operit 默认记忆库」的最后一个版本**。从 v1.5.8 起，注入范围仅覆盖 Operit 默认记忆库。
 
