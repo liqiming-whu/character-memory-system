@@ -195,7 +195,27 @@ async function flush(cat) {
 }
 
 // ===== 合并全部六类（供 UI / 注入 / 对账）=====
+async function readOnce(path) {
+  try {
+    var res = await Tools.Files.read(path);
+    if (res && typeof res.content === 'string') return res.content;
+    if (res && typeof res === 'string') return res;
+  } catch (e) {}
+  return '';
+}
+async function ensureStorageReady() {
+  // v1.8.0：worker/存储启动早期工具调用不稳定——loadAll 前探测数据目录可读（最多 5 轮 × 500ms）
+  for (var si = 0; si < 5; si++) {
+    var p1 = await readOnce(fileFor('info'));
+    if (p1 && p1.trim()) return true;
+    var p2 = await readOnce(fileFor('events'));
+    if (p2 && p2.trim()) return true;
+    await new Promise(function(r) { setTimeout(r, 500); });
+  }
+  return false;
+}
 async function loadAll() {
+  await ensureStorageReady();
   var out = { events: [], contacts: [], info: [], todos: [], finance: [], menstrual: [] };
   for (var i = 0; i < CATEGORIES.length; i++) {
     out[CATEGORIES[i]] = await readCategory(CATEGORIES[i]);
