@@ -138,7 +138,7 @@ var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
  (async function() {
    try {
-     var raw = await ctx.callTool('memory_system:trigger_analysis', {});
+     var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:trigger_analysis', {}); });
      var r = parseResult(raw);
      if (r && r.started) {
        // 异步分析已启动 → 显示"分析中"并轮询刷新数据
@@ -227,7 +227,7 @@ var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
     analyzedChatsInitRef.current = true;
     (async function() {
       try {
-        var raw = await ctx.callTool('memory_system:get_analyzed_chats', {});
+        var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:get_analyzed_chats', {}); });
         var r = parseResult(raw);
         if (r && r.success && r.chats) {
           analyzedChatsState[1](r.chats);
@@ -270,10 +270,10 @@ offsetState[1](0);
 try {
 // 注意：listChat 不支持 offset，所以一次性拉大数（200），
 // 真实对话数通过 totalCount 显示给用户，不再分页。
-var raw = await ctx.callTool('chat_exporter:list_chats_brief', {
+var raw = await __serialCtx(ctx, function() { return ctx.callTool('chat_exporter:list_chats_brief', {
 limit: 200,
 sort_order: 'desc'
-});
+}); });
 var r = parseResult(raw);
 if (r && r.success && r.data && r.data.chats) {
 chatsState[1](r.data.chats);
@@ -457,7 +457,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     injectionSavingState[1](true);
     injectionState[1](next);
     try {
-      var raw = await ctx.callTool('memory_system:set_injection_settings', next);
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:set_injection_settings', next); });
       var r = parseResult(raw);
       if (r && r.success && r.injection) {
         injectionState[1](r.injection);
@@ -496,7 +496,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     }
     injectionSavingState[1](true);
     try {
-      var raw = await ctx.callTool('memory_system:set_injection_settings', { max_memories: limit });
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:set_injection_settings', { max_memories: limit }); });
       var r = parseResult(raw);
       if (r && r.success && r.injection) {
         injectionState[1](r.injection);
@@ -517,7 +517,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     backupBusyState[1](true);
     backupResultState[1]('🔄 正在导出备份...');
     try {
-      var raw = await ctx.callTool('memory_system:export_backup', { reason: 'manual' });
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:export_backup', { reason: 'manual' }); });
       var r = parseResult(raw);
       if (r && r.success) {
         backupResultState[1]('✅ 备份已导出：' + (r.fileName || '') + '（' + (r.fileCount || 0) + ' 个文件）\n路径：' + (r.path || ''));
@@ -553,7 +553,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
       }
       var filePath = file.path || file.uri || '';
       backupResultState[1]('🔄 正在校验备份...');
-      var inspRaw = await ctx.callTool('memory_system:inspect_backup', { path: filePath });
+      var inspRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:inspect_backup', { path: filePath }); });
       var insp = parseResult(inspRaw);
       if (!insp || !insp.success || insp.valid !== true) {
         backupResultState[1]('❌ 备份校验失败：' + ((insp && insp.message) || '文件损坏或格式不正确'));
@@ -561,7 +561,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         return;
       }
       backupResultState[1]('🔄 备份有效（' + (insp.fileCount || 0) + ' 个文件），正在恢复（' + (backupModeState[0] === 'overwrite' ? '覆盖' : '合并') + '模式）...');
-      var resRaw = await ctx.callTool('memory_system:restore_backup', { path: filePath, mode: backupModeState[0] });
+      var resRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:restore_backup', { path: filePath, mode: backupModeState[0] }); });
       var res = parseResult(resRaw);
       if (res && res.success) {
         backupResultState[1]('✅ 恢复完成（' + res.mode + ' 模式，' + (res.fileCount || 0) + ' 个文件）');
@@ -579,7 +579,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     analyzingState[1](true);
     resultState[1]('🔄 分析中...');
     try {
-      var raw = await ctx.callTool('memory_system:analyze_saved_messages', {});
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:analyze_saved_messages', {}); });
       var r = parseResult(raw);
       if (r && r.success) {
         await loadData();
@@ -595,7 +595,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
 
   async function deleteItem(category, index) {
     try {
-      var raw = await ctx.callTool('memory_system:sync_to_env', { action: 'delete', category: category, index: String(index) });
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:sync_to_env', { action: 'delete', category: category, index: String(index) }); });
       if (parseResult(raw) && parseResult(raw).success) {
         await loadData();
         resultState[1]('✅ 已删除');
