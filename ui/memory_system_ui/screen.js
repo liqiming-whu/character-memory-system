@@ -389,7 +389,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         caller_card_id: personaId || undefined
       });
       var result = parseResult(raw);
-      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (params && params.caller_card_id ? params.caller_card_id : 'none'));
+      dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
         __memFail = 0;
