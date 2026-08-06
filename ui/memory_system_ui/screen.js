@@ -14,6 +14,7 @@ const messagesTab = require("./tabs/messages"); // 预留：消息Tab
 const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
+function __backoffMs(n) { return Math.min(300 * Math.pow(2, (n || 1) - 1), 10000); }  // v1.7.7 指数退避：300/600/1200/2400/4800/9600 上限 10s
 var __mountSeq = 0;  // v1.7.1 探针：mount 序号（模块重载会重置）
 var __charRefreshFn = null;  // v1.7.0：character 操作回流刷新（首次渲染绑定）
 var __loadDataFail = 0;
@@ -68,6 +69,7 @@ function Screen(ctx) {
   var dateEndState = ctx.useState('cms_dateEnd', (uiBoot.dateEnd !== undefined ? uiBoot.dateEnd : ''));
   var filterTypeState = ctx.useState('cms_filterType', (uiBoot.filterType !== undefined ? uiBoot.filterType : ''));
   var showCalState = ctx.useState('cms_showCal', false);
+  var dataLoadingState = ctx.useState('cms_dataLoading', false);  // v1.7.7 信息区加载态
   var __cK = null; try { __cK = JSON.parse(ctx.getEnv('CACHED_KNOWLEDGE_MEMORIES') || ''); } catch (e) {}
   var memoryState = ctx.useState('cms_memories', Array.isArray(__cK) ? __cK : []);  // v1.7.5 知识页缓存兜底
   var memoryLoadedState = ctx.useState('cms_memoriesLoaded', false);
@@ -282,6 +284,7 @@ loadingChatsState[1](false);
 
   // ===== 动作函数 =====
   async function loadData() {
+    dataLoadingState[1](true);
     try {
       var raw = await ctx.callTool('memory_system:load_saved_data', {});
       var r = parseResult(raw);
@@ -301,6 +304,7 @@ loadingChatsState[1](false);
       }
       __loadDataFail = 0;
       if (r && r.success) {
+            dataLoadingState[1](false);
             dataState[1]({
                 events: r.extracted && r.extracted.events || [],
                 contacts: r.extracted && r.extracted.contacts || [],
@@ -332,7 +336,7 @@ loadingChatsState[1](false);
           }));
         } catch(ex) {}
       }
-    } catch (e) { __loadDataFail += 1; if (__loadDataFail < 5) setTimeout(function() { loadData(); }, 800); dbgUi("loadData", "exception retry " + __loadDataFail); }
+    } catch (e) { __loadDataFail += 1; if (__loadDataFail < 10) setTimeout(function() { loadData(); }, __backoffMs(__loadDataFail)); dbgUi("loadData", "exception retry " + __loadDataFail); }
   }
 
   async function loadScreenPersona() {
@@ -349,7 +353,7 @@ loadingChatsState[1](false);
         var __curP = screenPersonaState[0];
         if (__curP && (__curP.id || __curP.name)) return;
         __personaFail += 1;
-        if (__personaFail < 5) setTimeout(function() { loadScreenPersona(); }, 800);
+        if (__personaFail < 10) setTimeout(function() { loadScreenPersona(); }, __backoffMs(__personaFail));
         return;
       }
       __personaFail = 0;
@@ -376,7 +380,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
           }
         } catch (e) {}
       }
-    } catch (e) { __personaFail += 1; if (__personaFail < 5) setTimeout(function() { loadScreenPersona(); }, 800); dbgUi("loadPersona", "exception retry " + __personaFail); }
+    } catch (e) { __personaFail += 1; if (__personaFail < 10) setTimeout(function() { loadScreenPersona(); }, __backoffMs(__personaFail)); dbgUi("loadPersona", "exception retry " + __personaFail); }
   }
 
   async function loadKnowledgeMemories() {
@@ -404,11 +408,11 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         // 空壳响应：已有记忆保留旧缓存不清空；无旧数据自驱重试（最多5次）
         if (memoryState[0] && memoryState[0].length) return;
         __memFail += 1;
-        if (__memFail < 5) setTimeout(function() { loadKnowledgeMemories(); }, 800);
+        if (__memFail < 10) setTimeout(function() { loadKnowledgeMemories(); }, __backoffMs(__memFail));
       } else {
         resultState[1]('记忆读取失败：' + ((result && result.message) || '未知错误'));
         __memFail += 1;
-        if (__memFail < 5) setTimeout(function() { loadKnowledgeMemories(); }, 800);
+        if (__memFail < 10) setTimeout(function() { loadKnowledgeMemories(); }, __backoffMs(__memFail));
       }
 
     } catch(e) {
@@ -843,6 +847,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     pendingDelete: pendingDeleteState[0],
     selContact: selContactState[0],
     memQuery: memoryQueryState[0] || '',
+    dataLoading: dataLoadingState[0],  // v1.7.7 信息区加载态
     // 消息Tab状态
     chats: chatsState[0],
     selectedChat: selectedChatState[0],

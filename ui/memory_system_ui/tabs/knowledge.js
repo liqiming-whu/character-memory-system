@@ -122,7 +122,13 @@ function render(ctx, allData, states, actions, memoryState) {
     }
   }
 
-  if (filteredInfo.length === 0 && filteredMemories.length === 0) {
+  if (filteredInfo.length === 0 && filteredMemories.length === 0 && states.dataLoading) {
+    items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 32 }, [
+      UI.Icon({ name: 'hourglass_empty', tint: colors.outlineVariant, size: 40 }),
+      UI.Spacer({ height: 12 }),
+      UI.Text({ text: '正在读取生活数据...', style: 'bodyMedium', color: colors.outline }),
+    ]));
+  } else if (filteredInfo.length === 0 && filteredMemories.length === 0) {
     items.push(UI.Column({ horizontalAlignment: 'center', fillMaxWidth: true, padding: 32 }, [
       UI.Icon({ name: 'menu_book', tint: colors.outlineVariant, size: 40 }),
       UI.Spacer({ height: 12 }),
