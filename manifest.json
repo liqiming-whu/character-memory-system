@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "toolpkg_id": "com.operit.character_memory_system",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "main": "main.js",
   "display_name": {
     "zh": "角色记忆系统",

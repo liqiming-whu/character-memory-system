@@ -33,6 +33,15 @@ const TAB_REGISTRY = [
   { id: 5, icon: 'settings',      label: '设置' },
 ];
 
+// v1.8.2：Operit bridge 并发工具调用响应错配根治——全局串行队列（挂 ctx 跨模块共享）
+function __serialCtx(ctx, fn) {
+  try {
+    if (!ctx.__cmsToolQ) ctx.__cmsToolQ = Promise.resolve();
+    var p = ctx.__cmsToolQ.then(function() { return fn(); }, function() { return fn(); });
+    ctx.__cmsToolQ = p.then(function() {}, function() {});
+    return p;
+  } catch (e) { return Promise.resolve().then(function() { return fn(); }); }
+}
 function _probeBytes(v) { try { return JSON.stringify(v).length; } catch (e) { return -1; } }
 function _probeCount(v) { try { return (v && v.length) ? v.length : 0; } catch (e) { return -1; } }
 function dbgUi(stage, msg) {
@@ -288,10 +297,16 @@ loadingChatsState[1](false);
   async function loadData() {
     dataLoadingState[1](true);
     try {
-      var raw = await ctx.callTool('memory_system:load_saved_data', {});
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:load_saved_data', {}); });
       var r = parseResult(raw);
       dbgUi("loadData", "resp success=" + !!(r && r.success) + " hasExt=" + !!(r && r.extracted) + " hasAny=" + !!((r && r.extracted) && ((r.extracted.events && r.extracted.events.length) || (r.extracted.contacts && r.extracted.contacts.length) || (r.extracted.info && r.extracted.info.length) || (r.extracted.finance && r.extracted.finance.length) || (r.extracted.todos && r.extracted.todos.length) || (r.extracted.menstrual && r.extracted.menstrual.length))) + " info=" + _probeCount(r && r.extracted && r.extracted.info) + " ev=" + _probeCount(r && r.extracted && r.extracted.events) + " ct=" + _probeCount(r && r.extracted && r.extracted.contacts) + " td=" + _probeCount(r && r.extracted && r.extracted.todos) + " fn=" + _probeCount(r && r.extracted && r.extracted.finance) + " ms=" + _probeCount(r && r.extracted && r.extracted.menstrual) + " bytes=" + _probeBytes(r));
       var __ext = (r && r.success && r.extracted) ? r.extracted : null;
+      // v1.8.2：bridge 错配响应（success=true 但无 extracted，如拿到 persona 响应）→ 一律重试
+      if (r && r.success && !r.extracted) {
+        __loadDataFail += 1;
+        if (__loadDataFail < 10) setTimeout(function() { loadData(); }, 800);
+        return;
+      }
       var __hasAny = __ext && ((__ext.events && __ext.events.length) || (__ext.contacts && __ext.contacts.length) || (__ext.info && __ext.info.length) || (__ext.finance && __ext.finance.length) || (__ext.todos && __ext.todos.length) || (__ext.menstrual && __ext.menstrual.length));
       // 空壳响应守卫（cme 实锤：新模块早期工具调用约 2/3 概率返回 success=true 但 extracted 为空）
       // 空壳 + 已有数据 → 保留旧数据绝不覆盖（空加载元凶）；空壳 + 无数据 → 自驱重试（最多5次）
@@ -345,7 +360,7 @@ loadingChatsState[1](false);
     // 每次进入都重新加载角色上下文与记忆；不因之前加载过而跳过，
     // 避免快速切换实例复用时持久 ref/state 残留导致角色页显示异常。
     try {
-      var pRaw = await ctx.callTool('memory_system:get_persona_context', {});
+      var pRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:get_persona_context', {}); });
       var pResult = parseResult(pRaw);
       dbgUi("loadPersona", "resp success=" + !!(pResult && pResult.success) + " persona=" + ((pResult && pResult.persona && (pResult.persona.id || pResult.persona.name)) ? ("HAS:" + pResult.persona.id + ":" + pResult.persona.name) : "EMPTY"));
       var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : null;
@@ -368,12 +383,12 @@ loadingChatsState[1](false);
 if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.name || '') || __curP2.type !== String(p.type || '')) screenPersonaState[1]({ id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') });
       if (p.id) {
         try {
-          var mRaw = await ctx.callTool('memory_system:load_memories', {
+          var mRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:load_memories', {
             query: '*',
             limit: 100,
             scope: 'all',
             caller_card_id: String(p.id)
-          });
+          }); });
           var mResult = parseResult(mRaw);
           dbgUi("loadMem", "char resp success=" + !!(mResult && mResult.success) + " count=" + ((mResult && mResult.memories) ? mResult.memories.length : -1) + " bytes=" + _probeBytes(mResult) + " caller=" + String(p.id));
           if (mResult && mResult.success && mResult.memories) {
@@ -390,15 +405,15 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     try {
       var personaId = (screenPersonaState[0] && (screenPersonaState[0].id || screenPersonaState[0].name)) ? String(screenPersonaState[0].id || '') : '';
       if (!personaId) {
-        var personaRaw = await ctx.callTool('memory_system:get_persona_context', {});
+        var personaRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:get_persona_context', {}); });
         var personaResult = parseResult(personaRaw);
         personaId = personaResult && personaResult.success && personaResult.persona ? String(personaResult.persona.id || '') : '';
       }
-      var raw = await ctx.callTool('memory_system:load_memories', {
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:load_memories', {
         limit: 100,
         scope: personaId ? 'all' : 'global',
         caller_card_id: personaId || undefined
-      });
+      }); });
       var result = parseResult(raw);
       dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " bytes=" + _probeBytes(result) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
       if (result && result.success && result.memories && result.memories.length) {

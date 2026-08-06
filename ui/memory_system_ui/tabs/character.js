@@ -49,11 +49,20 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     ])];
   }
 
+  // v1.8.2：Operit bridge 并发工具调用响应错配——全局串行队列（挂 ctx 跨模块共享，与 screen.js 同一队列）
+  function __serialCtx(ctx, fn) {
+    try {
+      if (!ctx.__cmsToolQ) ctx.__cmsToolQ = Promise.resolve();
+      var p = ctx.__cmsToolQ.then(function() { return fn(); }, function() { return fn(); });
+      ctx.__cmsToolQ = p.then(function() {}, function() {});
+      return p;
+    } catch (e) { return Promise.resolve().then(function() { return fn(); }); }
+  }
   async function callToolWithTimeout(name, params, timeoutMs) {
     var timer = null;
     try {
       return await Promise.race([
-        ctx.callTool(name, params),
+        __serialCtx(ctx, function() { return ctx.callTool(name, params); }),
         new Promise(function(_, reject) {
           timer = setTimeout(function() { reject(new Error('读取超时')); }, timeoutMs || 12000);
         })
@@ -130,13 +139,13 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
       return;
     }
     var category = categoryState[0];
-    var raw = await ctx.callTool('memory_system:create_memory', {
+    var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:create_memory', {
       title: '[' + category + '] ' + title,
       content: content,
       tags: 'character_memory,' + category + ',manual,schema_v1',
       source: 'character_memory_role_manual',
       caller_card_id: personaId
-    });
+    }); });
     var result = parseResult(raw);
     if (result && result.success) {
       titleState[1]('');
@@ -147,7 +156,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   }
 
   async function deleteMemory(title) {
-    var raw = await ctx.callTool('memory_system:delete_memory', { title: title, caller_card_id: personaId });
+    var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:delete_memory', { title: title, caller_card_id: personaId }); });
     var result = parseResult(raw);
     resultState[1](result && result.success ? '已删除' : ((result && result.message) || '删除失败'));
     if (result && result.success) { if (refreshFromScreen) { await refreshFromScreen(); } else { await loadMemories(); } }
