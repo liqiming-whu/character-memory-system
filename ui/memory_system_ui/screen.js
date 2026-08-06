@@ -14,6 +14,9 @@ const messagesTab = require("./tabs/messages"); // 预留：消息Tab
 const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
+var __loadDataFail = 0;
+var __personaFail = 0;
+var __memFail = 0;
 const TAB_REGISTRY = [
   { id: 0, icon: 'dashboard',     label: '概览' },
   { id: 1, icon: 'checklist',     label: '待办' },
@@ -265,6 +268,20 @@ loadingChatsState[1](false);
     try {
       var raw = await ctx.callTool('memory_system:load_saved_data', {});
       var r = parseResult(raw);
+      var __ext = (r && r.success && r.extracted) ? r.extracted : null;
+      var __hasAny = __ext && ((__ext.events && __ext.events.length) || (__ext.contacts && __ext.contacts.length) || (__ext.info && __ext.info.length) || (__ext.finance && __ext.finance.length) || (__ext.todos && __ext.todos.length) || (__ext.menstrual && __ext.menstrual.length));
+      // 空壳响应守卫（cme 实锤：新模块早期工具调用约 2/3 概率返回 success=true 但 extracted 为空）
+      // 空壳 + 已有数据 → 保留旧数据绝不覆盖（空加载元凶）；空壳 + 无数据 → 自驱重试（最多5次）
+      if (r && r.success && __ext && !__hasAny) {
+        var __cur = dataState[0];
+        var __hasOld = __cur && ((__cur.events && __cur.events.length) || (__cur.contacts && __cur.contacts.length) || (__cur.info && __cur.info.length) || (__cur.finance && __cur.finance.length) || (__cur.todos && __cur.todos.length) || (__cur.menstrual && __cur.menstrual.length));
+        if (!__hasOld) {
+          __loadDataFail += 1;
+          if (__loadDataFail < 5) setTimeout(function() { loadData(); }, 800);
+        }
+        return;
+      }
+      __loadDataFail = 0;
       if (r && r.success) {
             dataState[1]({
                 events: r.extracted && r.extracted.events || [],
@@ -306,7 +323,18 @@ loadingChatsState[1](false);
     try {
       var pRaw = await ctx.callTool('memory_system:get_persona_context', {});
       var pResult = parseResult(pRaw);
-      var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : { id: '', name: '', type: '' };
+      var p = (pResult && pResult.success && pResult.persona) ? pResult.persona : null;
+      // 空壳响应守卫：success=true 但 persona 为空（chars=0）→ 未识别角色卡元凶
+      // 已有 persona 保留旧值不清空；无旧值自驱重试（最多5次）
+      if (!p || (!p.id && !p.name)) {
+        var __curP = screenPersonaState[0];
+        if (__curP && (__curP.id || __curP.name)) return;
+        __personaFail += 1;
+        if (__personaFail < 5) setTimeout(function() { loadScreenPersona(); }, 800);
+        return;
+      }
+      __personaFail = 0;
+      p = { id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') };
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID', String(p.id || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME', String(p.name || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE', String(p.type || ''));
@@ -340,8 +368,20 @@ loadingChatsState[1](false);
         caller_card_id: personaId || undefined
       });
       var result = parseResult(raw);
-      if (result && result.success) memoryState[1](result.memories || []);
-      else resultState[1]('记忆读取失败：' + ((result && result.message) || '未知错误'));
+      if (result && result.success && result.memories && result.memories.length) {
+        memoryState[1](result.memories);
+        __memFail = 0;
+      } else if (result && result.success) {
+        // 空壳响应：已有记忆保留旧缓存不清空；无旧数据自驱重试（最多5次）
+        if (memoryState[0] && memoryState[0].length) return;
+        __memFail += 1;
+        if (__memFail < 5) setTimeout(function() { loadKnowledgeMemories(); }, 800);
+      } else {
+        resultState[1]('记忆读取失败：' + ((result && result.message) || '未知错误'));
+        __memFail += 1;
+        if (__memFail < 5) setTimeout(function() { loadKnowledgeMemories(); }, 800);
+      }
+
     } catch(e) {
       resultState[1]('记忆读取失败：' + (e.message || String(e)));
     }
@@ -751,7 +791,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   for (var ti = 0; ti < TAB_REGISTRY.length; ti++) {
     (function(t) {
       var isSel = currentTab === t.id;
-      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); } }, [
+      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: async function() { tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); if (t.id === 3 || t.id === 4) { await new Promise(function(__res) { setTimeout(__res, 600); }); } } }, [
         UI.Column({ fillMaxWidth: true, fillMaxHeight: true, horizontalAlignment: 'center', verticalArrangement: 'center' }, [
           UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
             UI.Icon({ name: t.icon, tint: isSel ? colors.primary : colors.outline, size: 21 }),
