@@ -29,11 +29,14 @@ async function ensureDir() {
 
 // ===== 底层文件读写 =====
 async function readTextFile(path) {
-  try {
-    var res = await Tools.Files.read(path);
-    if (res && typeof res.content === 'string') return res.content;
-    if (res && typeof res === 'string') return res;
-  } catch (e) {}
+  for (var ri = 0; ri < 3; ri++) {
+    try {
+      var res = await Tools.Files.read(path);
+      if (res && typeof res.content === 'string') return res.content;
+      if (res && typeof res === 'string') return res;
+    } catch (e) {}
+    if (ri < 2) await new Promise(function(r) { setTimeout(r, 300); });
+  }
   return '';
 }
 
@@ -138,8 +141,8 @@ async function readCategory(cat) {
       return rows;
     }
   } catch (e) {}
-  cache[cat] = [];
-  return cache[cat];
+  // v1.7.8：读取失败不缓存空——允许下次调用重读文件（工具侧自愈，修复同 worker 内"不恢复"）
+  return [];
 }
 
 // ===== 防抖写入 =====
