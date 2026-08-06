@@ -380,9 +380,12 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
   async function loadKnowledgeMemories() {
     memoryLoadingState[1](true);
     try {
-      var personaRaw = await ctx.callTool('memory_system:get_persona_context', {});
-      var personaResult = parseResult(personaRaw);
-      var personaId = personaResult && personaResult.success && personaResult.persona ? String(personaResult.persona.id || '') : '';
+      var personaId = (screenPersonaState[0] && (screenPersonaState[0].id || screenPersonaState[0].name)) ? String(screenPersonaState[0].id || '') : '';
+      if (!personaId) {
+        var personaRaw = await ctx.callTool('memory_system:get_persona_context', {});
+        var personaResult = parseResult(personaRaw);
+        personaId = personaResult && personaResult.success && personaResult.persona ? String(personaResult.persona.id || '') : '';
+      }
       var raw = await ctx.callTool('memory_system:load_memories', {
         limit: 100,
         scope: personaId ? 'all' : 'global',
@@ -392,6 +395,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
       dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
+        dbgUi("loadMem", "knowledge OK count=" + result.memories.length + " personaId=" + (personaId || 'none'));
         __memFail = 0;
       } else if (result && result.success) {
         // 空壳响应：已有记忆保留旧缓存不清空；无旧数据自驱重试（最多5次）

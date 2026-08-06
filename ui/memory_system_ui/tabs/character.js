@@ -32,6 +32,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   var personaType = String((__pProps && __pProps.type) || '');
   var memoriesState = ctx.useState('cms_character_memories', []);
   var __memProps = Array.isArray(memoriesFromScreen) ? memoriesFromScreen : [];  // v1.7.0 props 唯一数据源
+  try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [render] p=" + (__pProps ? 1 : 0) + " m=" + __memProps.length + " ready=" + (readyFromScreen ? 1 : 0) + "\n", true, "android"); } catch (e) {}
   var loadingState = ctx.useState('cms_character_loading', false);
   var loadedForRef = ctx.useRef('cms_character_loaded_for', '');
   var categoryState = ctx.useState('cms_character_category', 'relationship');
