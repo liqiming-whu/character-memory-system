@@ -14,6 +14,7 @@ const messagesTab = require("./tabs/messages"); // 预留：消息Tab
 const characterTab = require("./tabs/character");
 
 // ===== Tab 注册表 =====
+var __charRefreshFn = null;  // v1.7.0：character 操作回流刷新（首次渲染绑定）
 var __loadDataFail = 0;
 var __personaFail = 0;
 var __memFail = 0;
@@ -76,8 +77,14 @@ function Screen(ctx) {
   var backupBusyState = ctx.useState('cms_backupBusy', false);
   var backupResultState = ctx.useState('cms_backupResult', '');
   var backupModeState = ctx.useState('cms_backupMode', 'merge');
-  var screenPersonaState = ctx.useState('cms_screenPersona', null);
-  var screenCharMemoriesState = ctx.useState('cms_screenCharMemories', []);
+  var __cP = null; try { __cP = JSON.parse(ctx.getEnv('CACHED_PERSONA') || ''); } catch (e) {}
+  var screenPersonaState = ctx.useState('cms_screenPersona', __cP && (__cP.id || __cP.name) ? __cP : null);
+  var __cM = null; try { __cM = JSON.parse(ctx.getEnv('CACHED_CHAR_MEMORIES') || ''); } catch (e) {}
+  var screenCharMemoriesState = ctx.useState('cms_screenCharMemories', Array.isArray(__cM) ? __cM : []);
+  var characterReadyState = ctx.useState('cms_charReady', !!__cP);
+  if (!__charRefreshFn) {
+    __charRefreshFn = function() { return loadScreenPersona(); };
+  }
 var uiSaveRef = ctx.useRef('cms_uiSaveRef', '');
   var memoryLoadingState = ctx.useState('cms_memLoading', false);
   var pendingDeleteState = ctx.useState('cms_pendingDelete', '');
@@ -348,6 +355,7 @@ loadingChatsState[1](false);
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_ID', String(p.id || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME', String(p.name || ''));
       ctx.setEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE', String(p.type || ''));
+      try { ctx.setEnv('CACHED_PERSONA', JSON.stringify(p)); } catch (e) {}
       var __curP2 = screenPersonaState[0];
 if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.name || '') || __curP2.type !== String(p.type || '')) screenPersonaState[1]({ id: String(p.id || ''), name: String(p.name || ''), type: String(p.type || '') });
       if (p.id) {
@@ -361,6 +369,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
           var mResult = parseResult(mRaw);
           if (mResult && mResult.success && mResult.memories) {
             screenCharMemoriesState[1](mResult.memories);
+            try { ctx.setEnv('CACHED_CHAR_MEMORIES', JSON.stringify(mResult.memories)); } catch (e) {}
           }
         } catch (e) {}
       }
@@ -865,7 +874,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     case 1: tabContent = todosTab.render(ctx, allData, states, actions); break;
     case 2: tabContent = timelineTab.render(ctx, allData, states, actions); break;
     case 3: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
-    case 4: tabContent = characterTab.render(ctx, screenPersonaState[0], screenCharMemoriesState[0]); break;
+    case 4: tabContent = characterTab.render(ctx, screenPersonaState[0], screenCharMemoriesState[0], characterReadyState[0], __charRefreshFn); break;
     case 5: tabContent = [
       UI.Text({ text: '设置', style: 'titleMedium', color: colors.onSurface, fontWeight: 'bold' }),
       UI.Text({ text: '提取模型配置仅用于结构化分析；长期记忆使用 Operit 原生 Memory。', style: 'bodySmall', color: colors.onSurfaceVariant }),
@@ -949,6 +958,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     dbgUi("onLoad", "loadData done");
     await loadScreenPersona();
     dbgUi("onLoad", "loadScreenPersona done");
+    characterReadyState[1](true);
   } }, [
     headerCard,
     UI.Spacer({ height: 6 }),

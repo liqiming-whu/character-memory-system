@@ -12,7 +12,7 @@ const CATEGORIES = [
   { id: 'interaction_rule', label: '互动规则' },
 ];
 
-function render(ctx, personaFromScreen, memoriesFromScreen) {
+function render(ctx, personaFromScreen, memoriesFromScreen, readyFromScreen, refreshFromScreen) {
   var UI = ctx.UI;
   var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
   // 分类 chip 用 primary/tertiary 交替强调
@@ -26,12 +26,12 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     type: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE') || '')
   });
   // v1.6.9 治本：渲染体零 setState——数据只读 props（screen onLoad 加载后传入），回退 useState 初始值
-  var __pProps = (personaFromScreen && (personaFromScreen.id || personaFromScreen.name)) ? personaFromScreen : personaState[0];
+  var __pProps = (personaFromScreen && (personaFromScreen.id || personaFromScreen.name)) ? personaFromScreen : null;  // v1.7.0 props 唯一数据源
   var personaId = String((__pProps && __pProps.id) || '');
   var personaName = String((__pProps && __pProps.name) || '');
   var personaType = String((__pProps && __pProps.type) || '');
   var memoriesState = ctx.useState('cms_character_memories', []);
-  var __memProps = (Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) ? memoriesFromScreen : memoriesState[0];
+  var __memProps = Array.isArray(memoriesFromScreen) ? memoriesFromScreen : [];  // v1.7.0 props 唯一数据源
   var loadingState = ctx.useState('cms_character_loading', false);
   var loadedForRef = ctx.useRef('cms_character_loaded_for', '');
   var categoryState = ctx.useState('cms_character_category', 'relationship');
@@ -41,6 +41,12 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   var contextLoadingRef = ctx.useRef('cms_character_context_loading', false);
   var retryAtRef = ctx.useRef('cms_character_retry_at', 0);
   var autoLoadAtRef = ctx.useRef('cms_character_auto_load_at', 0);
+  // v1.7.0 数据 ready gate：未就绪时显示加载态（零副作用，不 setState 不加载）
+  if (!readyFromScreen) {
+    return [UI.Column({ fillMaxWidth: true, padding: 24 }, [
+      UI.Text({ text: '正在读取角色信息...', style: 'titleMedium', color: colors.onSurfaceVariant }),
+    ])];
+  }
 
   async function callToolWithTimeout(name, params, timeoutMs) {
     var timer = null;
@@ -135,7 +141,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
       titleState[1]('');
       contentState[1]('');
       resultState[1]('记忆创建成功');
-      await loadMemories();
+      if (refreshFromScreen) { await refreshFromScreen(); } else { await loadMemories(); }
     } else resultState[1]((result && result.message) || '创建失败');
   }
 
@@ -143,7 +149,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     var raw = await ctx.callTool('memory_system:delete_memory', { title: title, caller_card_id: personaId });
     var result = parseResult(raw);
     resultState[1](result && result.success ? '已删除' : ((result && result.message) || '删除失败'));
-    if (result && result.success) await loadMemories();
+    if (result && result.success) { if (refreshFromScreen) { await refreshFromScreen(); } else { await loadMemories(); } }
   }
 
   async function loadOnEnter() {
@@ -165,7 +171,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
         UI.Text({ text: personaType === 'character_group' ? '首版暂不支持角色组记忆' : '当前未识别到角色卡', style: 'titleMedium', color: colors.error, fontWeight: 'bold' }),
         UI.Text({ text: '请在启用角色卡的对话中发送一条消息后再打开此页面。', style: 'bodySmall', color: colors.onSurfaceVariant }),
         UI.Spacer({ height: 8 }),
-        UI.Button({ text: '重新识别角色卡', onClick: loadContext }),
+        UI.Button({ text: '重新识别角色卡', onClick: (refreshFromScreen || loadContext) }),
       ]),
     ])];
   }
@@ -180,7 +186,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
           UI.Text({ text: '角色卡 ID：' + personaId, style: 'labelSmall', color: colors.onSurfaceVariant, maxLines: 1 }),
           UI.Text({ text: '原生 Memory Profile · ' + __memProps.length + ' 条', style: 'labelSmall', color: colors.primary }),
         ]),
-        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: 6, onClick: loadMemories }, [
+        UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: 6, onClick: (refreshFromScreen || loadMemories) }, [
           UI.Icon({ name: 'refresh', tint: colors.onPrimary, size: 18 }),
         ]),
       ]),
