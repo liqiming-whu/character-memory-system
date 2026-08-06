@@ -295,7 +295,7 @@ loadingChatsState[1](false);
         var __hasOld = __cur && ((__cur.events && __cur.events.length) || (__cur.contacts && __cur.contacts.length) || (__cur.info && __cur.info.length) || (__cur.finance && __cur.finance.length) || (__cur.todos && __cur.todos.length) || (__cur.menstrual && __cur.menstrual.length));
         if (!__hasOld) {
           __loadDataFail += 1;
-          if (__loadDataFail < 5) setTimeout(function() { loadData(); }, 800);
+          if (__loadDataFail < 10) setTimeout(function() { loadData(); }, 800);  // v1.7.6 重试上限 5→10
         }
         return;
       }
@@ -365,10 +365,11 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
           var mRaw = await ctx.callTool('memory_system:load_memories', {
             query: '*',
             limit: 100,
-            scope: 'persona',
+            scope: 'all',
             caller_card_id: String(p.id)
           });
           var mResult = parseResult(mRaw);
+          dbgUi("loadMem", "char resp success=" + !!(mResult && mResult.success) + " count=" + ((mResult && mResult.memories) ? mResult.memories.length : -1) + " caller=" + String(p.id));
           if (mResult && mResult.success && mResult.memories) {
             screenCharMemoriesState[1](mResult.memories);
             try { ctx.setEnv('CACHED_CHAR_MEMORIES', JSON.stringify(mResult.memories)); } catch (e) {}
