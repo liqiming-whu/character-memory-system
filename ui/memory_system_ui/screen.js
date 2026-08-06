@@ -192,7 +192,7 @@ var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
 
   // ===== 角色页：进入时自动加载角色上下文与记忆（与知识页同款 setTimeout 模式）=====
   // 每次进入角色 tab 都重新加载，不因之前加载过而跳过；ref 仅防同帧重复。
-  if (!__bootCharLoad && currentTab === 3 && !characterLoadScheduledRef.current) { __bootCharLoad = true;
+  if (!__bootCharLoad && (currentTab === 3 || currentTab === 4) && !characterLoadScheduledRef.current) { __bootCharLoad = true;
     characterLoadScheduledRef.current = true;
     setTimeout(function() {
       loadScreenPersona().finally(function() { characterLoadScheduledRef.current = false; });

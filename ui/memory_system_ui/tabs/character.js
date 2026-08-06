@@ -25,20 +25,13 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     name: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_NAME') || ''),
     type: String(ctx.getEnv('MEMORY_SYSTEM_ACTIVE_PERSONA_TYPE') || '')
   });
-  // 外部传入的角色上下文优先：screen 根 onLoad 加载后传入，避免依赖子组件副作用
-  if (!__charPropsLock && personaFromScreen && (!personaState[0] || !personaState[0].id) && personaFromScreen.id) {
-    __charPropsLock = true;
-    personaState[1](personaFromScreen);
-  }
-  var personaId = String((personaState[0] && personaState[0].id) || '');
-  var personaName = String((personaState[0] && personaState[0].name) || '');
-  var personaType = String((personaState[0] && personaState[0].type) || '');
+  // v1.6.9 治本：渲染体零 setState——数据只读 props（screen onLoad 加载后传入），回退 useState 初始值
+  var __pProps = (personaFromScreen && (personaFromScreen.id || personaFromScreen.name)) ? personaFromScreen : personaState[0];
+  var personaId = String((__pProps && __pProps.id) || '');
+  var personaName = String((__pProps && __pProps.name) || '');
+  var personaType = String((__pProps && __pProps.type) || '');
   var memoriesState = ctx.useState('cms_character_memories', []);
-  // 外部传入的角色记忆优先：screen 加载后传入，避免子组件自触发不可靠导致记忆缺失
-  if (!__charMemPropsLock && Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) {
-    __charMemPropsLock = true;
-    memoriesState[1](memoriesFromScreen);
-  }
+  var __memProps = (Array.isArray(memoriesFromScreen) && memoriesFromScreen.length > 0) ? memoriesFromScreen : memoriesState[0];
   var loadingState = ctx.useState('cms_character_loading', false);
   var loadedForRef = ctx.useRef('cms_character_loaded_for', '');
   var categoryState = ctx.useState('cms_character_category', 'relationship');
@@ -162,9 +155,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     autoLoadAtRef.current = now;
     await loadContext();
   }
-  // 渲染时直接触发自动加载：不用 setTimeout，避免依赖事件循环；
-  // loadOnEnter 异步不阻塞渲染，loadContext 幂等（防重入 + 节流 + 失败退避）。
-  if (!__charAutoLoadOnce) { __charAutoLoadOnce = true; loadOnEnter(); }
+  // v1.6.9：渲染体不再触发加载——数据由 screen onLoad（loadScreenPersona）加载后经 props 传入
 
   if (!personaId) {
     return [UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 12 }, containerColor: colors.errorContainer, padding: 18 }, [
@@ -187,7 +178,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
         UI.Column({ weight: 1 }, [
           UI.Text({ text: personaName || '未命名角色', style: 'titleMedium', color: colors.primary, fontWeight: 'bold' }),
           UI.Text({ text: '角色卡 ID：' + personaId, style: 'labelSmall', color: colors.onSurfaceVariant, maxLines: 1 }),
-          UI.Text({ text: '原生 Memory Profile · ' + memoriesState[0].length + ' 条', style: 'labelSmall', color: colors.primary }),
+          UI.Text({ text: '原生 Memory Profile · ' + __memProps.length + ' 条', style: 'labelSmall', color: colors.primary }),
         ]),
         UI.Surface({ shape: { cornerRadius: 8 }, containerColor: colors.primary, padding: 6, onClick: loadMemories }, [
           UI.Icon({ name: 'refresh', tint: colors.onPrimary, size: 18 }),
@@ -218,7 +209,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   items.push(UI.Spacer({ height: 8 }));
   items.push(UI.Text({ text: loadingState[0] ? '正在读取…' : '角色记忆', style: 'labelMedium', color: colors.onSurface, fontWeight: 'bold' }));
 
-  for (var mi = 0; mi < memoriesState[0].length; mi++) {
+  for (var mi = 0; mi < __memProps.length; mi++) {
     (function(memory) {
       var displayTitle = String(memory.title || '未命名记忆').replace(/^\[persona:[^\]]+\]\s*/, '');
       items.push(UI.Surface({ fillMaxWidth: true, shape: { cornerRadius: 8 }, containerColor: colors.surface, padding: 10 }, [
@@ -233,7 +224,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
         ]),
       ]));
       items.push(UI.Spacer({ height: 3 }));
-    })(memoriesState[0][mi]);
+    })(__memProps[mi]);
   }
   return items;
 }
