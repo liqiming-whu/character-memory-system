@@ -68,7 +68,8 @@ function Screen(ctx) {
   var dateEndState = ctx.useState('cms_dateEnd', (uiBoot.dateEnd !== undefined ? uiBoot.dateEnd : ''));
   var filterTypeState = ctx.useState('cms_filterType', (uiBoot.filterType !== undefined ? uiBoot.filterType : ''));
   var showCalState = ctx.useState('cms_showCal', false);
-  var memoryState = ctx.useState('cms_memories', []);
+  var __cK = null; try { __cK = JSON.parse(ctx.getEnv('CACHED_KNOWLEDGE_MEMORIES') || ''); } catch (e) {}
+  var memoryState = ctx.useState('cms_memories', Array.isArray(__cK) ? __cK : []);  // v1.7.5 知识页缓存兜底
   var memoryLoadedState = ctx.useState('cms_memoriesLoaded', false);
   var memoryQueryState = ctx.useState('cms_memQuery', (uiBoot.memQuery !== undefined ? uiBoot.memQuery : ''));
   var injectionState = ctx.useState('cms_injectionSettings', null);
@@ -395,6 +396,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
       dbgUi("loadMem", "resp success=" + !!(result && result.success) + " count=" + ((result && result.memories) ? result.memories.length : -1) + " caller=" + (personaId ? personaId : 'none'));  // v1.7.3 修复: params 未定义引用
       if (result && result.success && result.memories && result.memories.length) {
         memoryState[1](result.memories);
+        try { ctx.setEnv('CACHED_KNOWLEDGE_MEMORIES', JSON.stringify(result.memories)); } catch (e) {}
         dbgUi("loadMem", "knowledge OK count=" + result.memories.length + " personaId=" + (personaId || 'none'));
         __memFail = 0;
       } else if (result && result.success) {
@@ -817,7 +819,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
   for (var ti = 0; ti < TAB_REGISTRY.length; ti++) {
     (function(t) {
       var isSel = currentTab === t.id;
-      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: async function() { dbgUi("tab", "switch to " + t.id); tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) memoryLoadedState[1](false); if (t.id === 3 || t.id === 4) { await new Promise(function(__res) { setTimeout(__res, 600); }); } } }, [
+      tabItems.push(UI.Surface({ weight: 1, height: 58, shape: { cornerRadius: 12 }, containerColor: isSel ? colors.primaryContainer : 'transparent', onClick: async function() { dbgUi("tab", "switch to " + t.id); tabState[1](t.id); filterTypeState[1](''); if (t.id === 3) { memoryLoadedState[1](false); __bootMemLoad = false; } if (t.id === 3 || t.id === 4) { __bootCharLoad = false; await new Promise(function(__res) { setTimeout(__res, 600); }); } } }, [
         UI.Column({ fillMaxWidth: true, fillMaxHeight: true, horizontalAlignment: 'center', verticalArrangement: 'center' }, [
           UI.Box({ fillMaxWidth: true, contentAlignment: 'center' }, [
             UI.Icon({ name: t.icon, tint: isSel ? colors.primary : colors.outline, size: 21 }),
@@ -975,6 +977,13 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
         var __m2 = JSON.parse(__mC2);
         if (Array.isArray(__m2) && __m2.length && (!screenCharMemoriesState[0] || screenCharMemoriesState[0].length === 0)) {
           screenCharMemoriesState[1](__m2);
+        }
+      }
+      var __kC2 = ctx.getEnv('CACHED_KNOWLEDGE_MEMORIES') || '';
+      if (__kC2) {
+        var __k2 = JSON.parse(__kC2);
+        if (Array.isArray(__k2) && __k2.length && (!memoryState[0] || memoryState[0].length === 0)) {
+          memoryState[1](__k2);
         }
       }
     } catch (e) {}
