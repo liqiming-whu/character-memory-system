@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 
 const shared = require("../shared");
-const { parseResult } = shared;
+const { parseResult, fmtErr } = shared;
 const theme = require("../theme");
 
 const CATEGORIES = [
@@ -32,7 +32,8 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
   var personaType = String((__pProps && __pProps.type) || '');
   var memoriesState = ctx.useState('cms_character_memories', []);
   var __memProps = Array.isArray(memoriesFromScreen) ? memoriesFromScreen : [];  // v1.7.0 props 唯一数据源
-  try { Tools.Files.write("/sdcard/Download/Operit/character_memory_system_data/dbg_ui.log", new Date().toISOString().slice(5, 19) + " [render] p=" + (__pProps ? 1 : 0) + " m=" + __memProps.length + " ready=" + (readyFromScreen ? 1 : 0) + "\n", true, "android"); } catch (e) {}
+  // v2.1.0：移除渲染闭包内的 Tools.Files.write 探针——每次角色页渲染同步写文件，
+  // 快速切 tab 渲染风暴时文件 I/O 竞争导致中间渲染失败 → Operit 动作表竞态 → compose_dsl "not a function"
   var loadingState = ctx.useState('cms_character_loading', false);
   var loadedForRef = ctx.useRef('cms_character_loaded_for', '');
   var categoryState = ctx.useState('cms_character_category', 'relationship');
@@ -91,11 +92,11 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
         loadedForRef.current = targetPersonaId;
         retryAtRef.current = 0;
       } else {
-        resultState[1]('读取失败：' + ((result && result.message) || '未知错误'));
+        resultState[1]('读取失败：' + (fmtErr((result && result.message) || '未知错误')));
         retryAtRef.current = Date.now() + 30000;
       }
     } catch (e) {
-      resultState[1]('读取失败：' + (e.message || String(e)));
+      resultState[1]('读取失败：' + (fmtErr(e.message || String(e))));
       retryAtRef.current = Date.now() + 30000;
     }
     loadingState[1](false);
@@ -119,7 +120,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
         retryAtRef.current = Date.now() + 30000;
       }
     } catch (e) {
-      resultState[1]('角色上下文读取失败：' + (e.message || String(e)));
+      resultState[1]('角色上下文读取失败：' + (fmtErr(e.message || String(e))));
       retryAtRef.current = Date.now() + 30000;
     } finally {
       contextLoadingRef.current = false;
