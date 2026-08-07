@@ -1,6 +1,33 @@
 # Character Memory System
 
-## 当前版本：v1.8.4（Architecture Fix Release）
+## 当前版本：v2.0.0（Frontend Overhaul & Memory Pipeline Release）
+
+本次发布以「前端体验修复 + 记忆分析链路根治」为主题，跨 CMS/CME 双端共 15 个提交。CMS 侧核心：
+
+**记忆管理 UI**
+
+1. 知识页「记忆」栏目新增删除按钮（两段式：删除→确认），与「信息」栏目对齐；删除按钮移到条目标最右侧，不再紧贴时间徽标。
+2. 删除链路修复：前端补传 `caller_card_id`（persona 目录定位）、CMS 删除按 `title` 传参（对齐原生 `delete_memory` 语义）。
+3. 幽灵记忆处理：删除遇 `Memory not found` 时本地清理缓存；真空加载（查询成功但 0 条）清空历史幽灵缓存，UI 不再显示假条目。
+
+**错误提示**
+
+4. `fmtErr` 收紧为只匹配工具缺失类报错（`tool(s) not found` / `no tool`）才追加「请在配置中启用」，数据错误（如 Memory not found）显示原始信息，不再误导。
+
+**分析链路（根治「无新对话内容」）**
+
+5. 消息时间戳健壮化 `tsToMs`：兼容 epoch 毫秒 / epoch 秒 / ISO 带时区 / 本地无时区串四种形态，统一转毫秒比较，水位线过滤不再因格式变化失效。
+6. 窗口修复（根因）：`Tools.Chat.getMessages` 每次最多返回约 195 条，且 `order:'asc'` 取最早窗口（旧对话）、`desc` 取最新窗口，两窗口不连续。原 asc 拉取在消息量越过窗口后永远拿不到新消息 → 水位线过滤后恒为「无新对话内容」。
+7. 设计定稿：分析统一只取**时间最近的 200 条**（`desc + limit:200 + reverse`），侧边栏自动检测（trigger_analysis）、手动分析（analyze_saved_messages）与 main.js processCooldown 三处一致。
+8. 双时区端到端验证：Etc/UTC 与 Asia/Shanghai 下新消息 timestamp 均为 epoch 毫秒（时区无关），`desc` 增量检测两种时区均正常（4 条 / 2 条命中），水位线连续推进——确认改 UTC 不影响拉取最新，纯属窗口取错。
+
+**CME 端同步**（下次切回 CME 时随烧录生效）：分析工具名修正（`memory_system:analyze_saved_messages` → `memory_engine:analyze_chat`）、import_legacy_backup 子标题丢失修复、时间线/知识删除按钮单击直删、fmtErr 收紧、幽灵记忆处理、同款窗口修复（两处 `order:'asc'` → `desc + reverse`）。
+
+详细报告见 [CMS_v2.0.0_前端大修与记忆链路修复报告](docs/CMS_v2.0.0_前端大修与记忆链路修复报告.md)。
+
+---
+
+## 上一版本：v1.8.4（Architecture Fix Release）
 
 本次发布确定了整个 CMS/CME 系列插件在 Operit 上的正确开发范式，修复三大架构级问题：
 
@@ -24,9 +51,9 @@
 
 Character Memory System 是基于 Operit ToolPkg 和原生 Memory API 的角色长期记忆扩展。项目在保留个人 AI 助手能力的基础上，为当前角色卡增加隔离的长期记忆、召回和 Prompt 注入。
 
-当前版本：`1.8.4`（架构修复版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
+当前版本：`2.0.0`（前端大修与记忆链路修复版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
 
-当前测试包：`com-operit-character-memory-system-v1.8.4.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
+当前测试包：`com-operit-character-memory-system-v2.0.0.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
 
 > ⚠️ **v1.5.7 是支持「同时注入 memory_system + Operit 默认记忆库」的最后一个版本**。从 v1.5.8 起，注入范围仅覆盖 Operit 默认记忆库。
 
