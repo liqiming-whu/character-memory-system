@@ -234,7 +234,7 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
             UI.Text({ text: displayTitle, style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
             UI.Text({ text: memory.content || '', style: 'labelSmall', color: colors.onSurfaceVariant, maxLines: 3 }),
           ]),
-          UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.errorContainer, padding: 5, onClick: function() { deleteMemory(memory.title); } }, [
+          UI.Surface({ shape: { cornerRadius: 6 }, containerColor: colors.errorContainer, padding: 5, onClick: function() { return deleteMemory(memory.title); } }, [
             UI.Icon({ name: 'delete', tint: colors.error, size: 16 }),
           ]),
         ]),

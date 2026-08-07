@@ -741,7 +741,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
           UI.Text({ text: (allData.todos || []).length + ' 待办 · ' + pendingTodoCount + ' 待完成 · ' + (allData.events || []).length + ' 事件', style: 'labelSmall', color: colors.onSurfaceVariant }),
         ]),
         UI.Row({ verticalAlignment: 'center' }, [
-          UI.Surface({ shape: { cornerRadius: 12 }, containerColor: analyzing ? colors.errorContainer : colors.primary, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { if (!analyzing) doAnalyze(); } }, [
+          UI.Surface({ shape: { cornerRadius: 12 }, containerColor: analyzing ? colors.errorContainer : colors.primary, padding: { left: 10, right: 10, top: 4, bottom: 4 }, onClick: function() { if (!analyzing) return doAnalyze(); } }, [
             UI.Text({ text: analyzing ? '⏳ 分析中' : '🤖 分析', style: 'labelSmall', color: analyzing ? colors.error : colors.onPrimary, fontWeight: 'bold' }),
           ]),
         ]),
