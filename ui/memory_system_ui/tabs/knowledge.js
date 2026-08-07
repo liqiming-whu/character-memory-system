@@ -50,7 +50,7 @@ function render(ctx, allData, states, actions, memoryState) {
     return UI.Surface({ shape: { cornerRadius: 4 }, containerColor: isPending ? colors.error : colors.errorContainer, padding: { left: 6, right: 6, top: 2, bottom: 2 }, onClick: function() {
       if (isPending) {
         actions.setPendingDelete('');
-        return actions.deleteMemory(m.id || m.title);
+        return actions.deleteMemory(m.title);
       } else {
         actions.setPendingDelete(key);
       }
@@ -129,9 +129,9 @@ function render(ctx, allData, states, actions, memoryState) {
                 ]),
                 UI.Spacer({ width: 4 }),
                 dateStr ? UI.Text({ text: dateStr, style: 'labelSmall', color: colors.outlineVariant, fontSize: 9 }) : null,
-                makeDeleteMemBtn(m),
               ].filter(Boolean)),
             ]),
+            makeDeleteMemBtn(m),
           ]),
         ]));
         items.push(UI.Spacer({ height: 3 }));
