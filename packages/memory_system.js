@@ -183,6 +183,21 @@ function personaMemoryFolder(callerCardId) {
     return safeId ? 'character_memory/personas/' + safeId : GLOBAL_MEMORY_FOLDER;
 }
 
+function tsToMs(t) {
+    if (t == null) return 0;
+    if (typeof t === 'number') return t > 1e12 ? t : t * 1000;
+    if (typeof t === 'string') {
+        var s = String(t).trim();
+        if (!s) return 0;
+        var n = Number(s);
+        if (!isNaN(n) && isFinite(n)) return n > 1e12 ? n : n * 1000;
+        var d = Date.parse(s);
+        if (!isNaN(d)) return d;
+        var d2 = new Date(s.replace(/-/g, '/'));
+        if (!isNaN(d2.getTime())) return d2.getTime();
+    }
+    return 0;
+}
 function analysisWatermark(state, chatId) {
     if (state && state.watermarks && state.watermarks[chatId]) return state.watermarks[chatId];
     if (state && state.chatId === chatId && state.lastProcessedTs) return state.lastProcessedTs;
@@ -1308,7 +1323,8 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
         // 推进水位线
         var maxTs = 0;
         for (var mti = 0; mti < messages.length; mti++) {
-            if (messages[mti].timestamp && messages[mti].timestamp > maxTs) maxTs = messages[mti].timestamp;
+            var __mt = tsToMs(messages[mti].timestamp);
+            if (__mt > maxTs) maxTs = __mt;
         }
         var stateAfter = await readJson(TRIGGER_STATE_FILE, {});
         if (!stateAfter.watermarks) stateAfter.watermarks = {};
@@ -1374,7 +1390,7 @@ exports.trigger_analysis = async function (params) {
         var lastProcessedTs = analysisWatermark(triggerState, chatId);
         var newMessages = allMessages;
         if (lastProcessedTs) {
-            newMessages = allMessages.filter(function (m) { return m.timestamp > lastProcessedTs; });
+            newMessages = allMessages.filter(function (m) { return tsToMs(m.timestamp) > lastProcessedTs; });
         }
 
         if (newMessages.length === 0) {

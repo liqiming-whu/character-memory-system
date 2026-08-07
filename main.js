@@ -27,6 +27,21 @@ var INJECTION_MARKER = 'id="' + INJECTION_ATTACHMENT_ID_PREFIX;
 var COOLDOWN_MS = 20 * 60 * 1000; // 连续静默20分钟后结算
 var ANALYSIS_RETRY_BACKOFF_MS = 10 * 60 * 1000; // 分析失败后 10 分钟内不重复重试，避免反复白烧 token
 
+function tsToMs(t) {
+  if (t == null) return 0;
+  if (typeof t === 'number') return t > 1e12 ? t : t * 1000;
+  if (typeof t === 'string') {
+    var s = String(t).trim();
+    if (!s) return 0;
+    var n = Number(s);
+    if (!isNaN(n) && isFinite(n)) return n > 1e12 ? n : n * 1000;
+    var d = Date.parse(s);
+    if (!isNaN(d)) return d;
+    var d2 = new Date(s.replace(/-/g, '/'));
+    if (!isNaN(d2.getTime())) return d2.getTime();
+  }
+  return 0;
+}
 function analysisWatermark(state, chatId) {
   if (state && state.watermarks && state.watermarks[chatId]) return state.watermarks[chatId];
   if (state && state.chatId === chatId && state.lastProcessedTs) return state.lastProcessedTs;
@@ -271,7 +286,7 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
     var messages = allMessages;
     if (lastProcessedTs) {
       messages = allMessages.filter(function(m) {
-        return m.timestamp > lastProcessedTs;
+        return tsToMs(m.timestamp) > lastProcessedTs;
       });
     }
 
@@ -416,8 +431,9 @@ async function processCooldown(processChatId, chatIdChanged, lastProcessedTs, ca
     // === 处理成功：更新水位线 ===
     var maxTs = 0;
     for (var mti = 0; mti < messages.length; mti++) {
-      if (messages[mti].timestamp && messages[mti].timestamp > maxTs) {
-        maxTs = messages[mti].timestamp;
+      var __mt = tsToMs(messages[mti].timestamp);
+      if (__mt > maxTs) {
+        maxTs = __mt;
       }
     }
     if (maxTs > 0) {
