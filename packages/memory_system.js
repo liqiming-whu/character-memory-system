@@ -669,7 +669,8 @@ exports.analyze_saved_messages = async function (params) {
         var messages = [];
         if (chatId) {
             try {
-                var msgResult = await Tools.Chat.getMessages(chatId, { order: 'desc' });
+                // 手动分析同样取最近200条（desc+reverse，避免 asc 取旧窗口）
+                var msgResult = await Tools.Chat.getMessages(chatId, { order: 'desc', limit: 200 });
                 if (msgResult && msgResult.messages) {
                     messages = msgResult.messages.reverse();
                 }
@@ -1368,10 +1369,10 @@ exports.trigger_analysis = async function (params) {
             return;
         }
 
-        // 拉消息（v1.8.7：order:'asc' 会漏掉时区变更后的新消息，改用 desc+reverse）
+        // 拉消息（设计：取时间最近的200条；order:'asc' 会取旧窗口导致检测不到新消息，必须 desc+reverse）
         var allMessages = [];
         try {
-            var msgResult = await Tools.Chat.getMessages(chatId, { order: 'desc', limit: 500 });
+            var msgResult = await Tools.Chat.getMessages(chatId, { order: 'desc', limit: 200 });
             if (msgResult && msgResult.messages) allMessages = msgResult.messages.reverse();
         } catch (e) {}
 
@@ -1392,7 +1393,7 @@ exports.trigger_analysis = async function (params) {
         if (lastProcessedTs) {
             newMessages = allMessages.filter(function (m) { return tsToMs(m.timestamp) > lastProcessedTs; });
         }
-        if (newMessages.length === 0) {
+if (newMessages.length === 0) {
             // 没有新内容：更新一下 lastAnalyzedAt（标记"已检测过"），但不动水位线
             triggerState.lastCheckedAt = new Date().toISOString();
             triggerState.lastCheckedChatId = chatId;
