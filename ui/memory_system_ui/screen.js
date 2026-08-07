@@ -609,7 +609,13 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
 
   async function deleteMemory(memoryId) {
     try {
-      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:delete_memory', { memory_id: String(memoryId) }); });
+      var personaId = (screenPersonaState[0] && (screenPersonaState[0].id || screenPersonaState[0].name)) ? String(screenPersonaState[0].id || '') : '';
+      if (!personaId) {
+        var personaRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:get_persona_context', {}); });
+        var personaResult = parseResult(personaRaw);
+        personaId = personaResult && personaResult.success && personaResult.persona ? String(personaResult.persona.id || '') : '';
+      }
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:delete_memory', { memory_id: String(memoryId), caller_card_id: personaId || undefined }); });
       var r = parseResult(raw);
       if (r && r.success) {
         await loadKnowledgeMemories();
