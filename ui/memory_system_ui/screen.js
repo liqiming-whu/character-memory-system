@@ -900,7 +900,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
 
   var tabContent;
   switch (currentTab) {
-    case 0: tabContent = overviewTab.render(ctx, allData); break;
+    case 0: tabContent = overviewTab.render(ctx, allData, { onOpenTodos: function() { tabState[1](1); } }); break;
     case 1: tabContent = todosTab.render(ctx, allData, states, actions); break;
     case 2: tabContent = timelineTab.render(ctx, allData, states, actions); break;
     case 3: tabContent = knowledgeTab.render(ctx, allData, states, actions, memoryState[0]); break;
@@ -973,7 +973,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
       UI.Spacer({ height: 8 }),
     ].concat(cfgSection);
       break;
-    default: tabContent = overviewTab.render(ctx, allData);
+    default: tabContent = overviewTab.render(ctx, allData, { onOpenTodos: function() { tabState[1](1); } });
   }
 
   // ===== 返回 =====
