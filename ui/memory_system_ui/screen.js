@@ -605,6 +605,18 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
     }
   }
 
+  async function deleteMemory(memoryId) {
+    try {
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:delete_memory', { memory_id: String(memoryId) }); });
+      if (parseResult(raw) && parseResult(raw).success) {
+        await loadKnowledgeMemories();
+        resultState[1]('✅ 已删除');
+      }
+    } catch(e) {
+      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
+    }
+  }
+
   // ===== 状态读取 =====
   var allData = dataState[0];
   var analyzing = analyzingState[0];
@@ -886,6 +898,7 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     setResult: resultState[1],
     setPendingDelete: pendingDeleteState[1],
     deleteItem: deleteItem,
+    deleteMemory: deleteMemory,
     // 消息Tab actions
     setChats: chatsState[1],
     setSelectedChat: selectedChatState[1],
