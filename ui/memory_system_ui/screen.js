@@ -959,17 +959,13 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
           UI.Row({ fillMaxWidth: true, verticalAlignment: 'center' }, [
             UI.Text({ text: '恢复模式', style: 'bodySmall', color: colors.onSurface, fontWeight: 'bold' }),
             UI.Spacer({ width: 8 }),
-            UI.FilterChip({
-              label: UI.Text({ text: '合并（保留现有）', style: 'labelSmall', color: backupModeState[0] === 'merge' ? colors.primary : colors.onSurfaceVariant }),
-              selected: backupModeState[0] === 'merge',
-              onClick: function() { backupModeState[1]('merge'); }
-            }),
-            UI.Spacer({ width: 4 }),
-            UI.FilterChip({
-              label: UI.Text({ text: '覆盖', style: 'labelSmall', color: backupModeState[0] === 'overwrite' ? colors.primary : colors.onSurfaceVariant }),
-              selected: backupModeState[0] === 'overwrite',
-              onClick: function() { backupModeState[1]('overwrite'); }
-            }),
+            UI.Surface({ shape: { cornerRadius: 8 }, containerColor: backupModeState[0] === 'merge' ? colors.primary : colors.surfaceContainerHigh, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: function() { backupModeState[1]('merge'); } }, [
+              UI.Text({ text: '合并（保留现有）', style: 'labelSmall', color: backupModeState[0] === 'merge' ? colors.onPrimary : colors.onSurfaceVariant, fontWeight: 'bold' }),
+            ]),
+            UI.Spacer({ width: 8 }),
+            UI.Surface({ shape: { cornerRadius: 8 }, containerColor: backupModeState[0] === 'overwrite' ? colors.primary : colors.surfaceContainerHigh, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: function() { backupModeState[1]('overwrite'); } }, [
+              UI.Text({ text: '覆盖', style: 'labelSmall', color: backupModeState[0] === 'overwrite' ? colors.onPrimary : colors.onSurfaceVariant, fontWeight: 'bold' }),
+            ]),
           ]),
           backupResultState[0] ? UI.Text({ text: backupResultState[0], style: 'labelSmall', color: colors.onSurfaceVariant, fontSize: 11 }) : null,
         ]),

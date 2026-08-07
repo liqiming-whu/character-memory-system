@@ -210,14 +210,18 @@ var catColors = [colors.primary, colors.tertiary, colors.error, colors.secondary
     (function(category, idx) {
       var selected = categoryState[0] === category.id;
       var color = catColors[idx % catColors.length];
-      chips.push(UI.FilterChip({
-        label: UI.Text({ text: category.label, style: 'labelSmall', color: selected ? colors.primary : colors.onSurfaceVariant }),
-        selected: selected,
-        onClick: function() { categoryState[1](category.id); }
-      }));
+      // v2.2.3：与 CME 一致——未选中也用浅色底（surfaceContainerHigh），选中用分类色实底
+      var onColor = idx % catColors.length === 2 ? colors.onError
+        : (idx % catColors.length === 3 ? colors.onSecondary
+          : (idx % catColors.length === 1 ? colors.onTertiary : colors.onPrimary));
+      chips.push(UI.Surface({ shape: { cornerRadius: 8 }, containerColor: selected ? color : colors.surfaceContainerHigh, padding: { left: 12, right: 12, top: 6, bottom: 6 }, onClick: function() { categoryState[1](category.id); } }, [
+        UI.Text({ text: category.label, style: 'labelSmall', color: selected ? onColor : colors.onSurfaceVariant, fontWeight: 'bold' }),
+      ]));
     })(CATEGORIES[ci], ci);
+    // 显式 Spacer 分隔（Row spacing 参数不可靠，与 CME 一致）
+    if (ci < CATEGORIES.length - 1) chips.push(UI.Spacer({ width: 30 }));
   }
-  items.push(UI.Row({ fillMaxWidth: true, spacing: 4 }, chips));
+  items.push(UI.Row({ fillMaxWidth: true, horizontalArrangement: 'center' }, chips));
   items.push(UI.TextField({ value: titleState[0], onValueChange: titleState[1], placeholder: '标题', singleLine: true }));
   items.push(UI.TextField({ value: contentState[0], onValueChange: contentState[1], placeholder: '明确、可复用的长期记忆' }));
   items.push(UI.Button({ text: '保存到当前角色', onClick: createMemory, fillMaxWidth: true }));
