@@ -1,6 +1,13 @@
 # Character Memory System
 
-## 当前版本：v2.0.0（Frontend Overhaul & Memory Pipeline Release）
+## 当前版本：v2.1.0（Rendering Hotfix Release）
+本次热修复聚焦渲染链路稳定性，消除快速切换选项卡时的偶发 compose_dsl 崩溃：
+1. **移除角色页渲染闭包内残留探针**（`tabs/character.js` 的 `Tools.Files.write`）：每次角色页渲染同步写文件，快速切 tab 渲染风暴时文件 I/O 竞争 → 中间渲染失败 → Operit DSL 动作表竞态 → `compose_dsl runtime error: not a function`（operit.log 实锤 `__operit_dispatch_compose_dsl_action`）。
+2. 与 CME 同源优化对齐（CME `89076ea`）：渲染闭包内禁止任何文件 I/O 与工具调用；探针统一走限频路径或整体关闭。
+3. 修复后快速连续切换 tab（含角色页）不再触发 DSL 崩溃。
+提交：`ad295cc`
+---
+## 上一版本：v2.0.0（Frontend Overhaul & Memory Pipeline Release）
 
 本次发布以「前端体验修复 + 记忆分析链路根治」为主题，跨 CMS/CME 双端共 15 个提交。CMS 侧核心：
 
@@ -27,7 +34,7 @@
 
 ---
 
-## 上一版本：v1.8.4（Architecture Fix Release）
+## 更早版本：v1.8.4（Architecture Fix Release）
 
 本次发布确定了整个 CMS/CME 系列插件在 Operit 上的正确开发范式，修复三大架构级问题：
 
@@ -51,9 +58,9 @@
 
 Character Memory System 是基于 Operit ToolPkg 和原生 Memory API 的角色长期记忆扩展。项目在保留个人 AI 助手能力的基础上，为当前角色卡增加隔离的长期记忆、召回和 Prompt 注入。
 
-当前版本：`2.0.0`（前端大修与记忆链路修复版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
+当前版本：`2.1.0`（渲染稳定性热修版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
 
-当前测试包：`com-operit-character-memory-system-v2.0.0.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
+当前测试包：`com-operit-character-memory-system-v2.1.0.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
 
 > ⚠️ **v1.5.7 是支持「同时注入 memory_system + Operit 默认记忆库」的最后一个版本**。从 v1.5.8 起，注入范围仅覆盖 Operit 默认记忆库。
 
