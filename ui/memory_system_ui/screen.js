@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = Screen;
 
 const shared = require("./shared");
-const { relationMap, parseResult, pad2 } = shared;
+const { relationMap, parseResult, pad2, fmtErr } = shared;
 const theme = require("./theme");
 const overviewTab = require("./tabs/overview");
 const todosTab = require("./tabs/todos");
@@ -187,7 +187,7 @@ var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
        // 没有新内容：静默（也可选显示一句提示）
        resultState[1]('✅ 无新对话内容 (' + (r.lastAnalyzedAt ? '上次分析：' + new Date(r.lastAnalyzedAt).toLocaleString() : '首次检测') + ')');
      } else if (r && !r.success) {
-       resultState[1]('⚠️ 检测失败：' + (r.message || r.error || '未知'));
+       resultState[1]('⚠️ 检测失败：' + (fmtErr(r.message || r.error || '未知')));
      }
    } catch(e) {}
  })();
@@ -427,13 +427,13 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         __memFail += 1;
         if (__memFail < 10) setTimeout(function() { loadKnowledgeMemories(); }, __backoffMs(__memFail));
       } else {
-        resultState[1]('记忆读取失败：' + ((result && result.message) || '未知错误'));
+        resultState[1]('记忆读取失败：' + (fmtErr((result && result.message) || '未知错误')));
         __memFail += 1;
         if (__memFail < 10) setTimeout(function() { loadKnowledgeMemories(); }, __backoffMs(__memFail));
       }
 
     } catch(e) {
-      resultState[1]('记忆读取失败：' + (e.message || String(e)));
+      resultState[1]('记忆读取失败：' + (fmtErr(e.message || String(e))));
     }
     memoryLoadedState[1](true);
     memoryLoadingState[1](false);
@@ -464,11 +464,11 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         resultState[1]('✅ 记忆注入设置已保存');
       } else {
         injectionState[1](current);
-        resultState[1]('❌ ' + ((r && r.message) || '注入设置保存失败'));
+        resultState[1]('❌ ' + (fmtErr((r && r.message) || '注入设置保存失败')));
       }
     } catch (e) {
       injectionState[1](current);
-      resultState[1]('❌ ' + (e.message || String(e)));
+      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
     injectionSavingState[1](false);
   }
@@ -503,10 +503,10 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         injectionLimitInputState[1](String(r.injection.maxMemories));
         resultState[1]('✅ 注入记忆条数已保存');
       } else {
-        resultState[1]('❌ ' + ((r && r.message) || '注入记忆条数保存失败'));
+        resultState[1]('❌ ' + (fmtErr((r && r.message) || '注入记忆条数保存失败')));
       }
     } catch (e) {
-      resultState[1]('❌ ' + (e.message || String(e)));
+      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
     injectionSavingState[1](false);
   }
@@ -522,10 +522,10 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
       if (r && r.success) {
         backupResultState[1]('✅ 备份已导出：' + (r.fileName || '') + '（' + (r.fileCount || 0) + ' 个文件）\n路径：' + (r.path || ''));
       } else {
-        backupResultState[1]('❌ ' + ((r && r.message) || '导出失败'));
+        backupResultState[1]('❌ ' + (fmtErr((r && r.message) || '导出失败')));
       }
     } catch (e) {
-      backupResultState[1]('❌ ' + (e.message || String(e)));
+      backupResultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
     backupBusyState[1](false);
   }
@@ -556,7 +556,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
       var inspRaw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:inspect_backup', { path: filePath }); });
       var insp = parseResult(inspRaw);
       if (!insp || !insp.success || insp.valid !== true) {
-        backupResultState[1]('❌ 备份校验失败：' + ((insp && insp.message) || '文件损坏或格式不正确'));
+        backupResultState[1]('❌ 备份校验失败：' + (fmtErr((insp && insp.message) || '文件损坏或格式不正确')));
         backupBusyState[1](false);
         return;
       }
@@ -567,10 +567,10 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         backupResultState[1]('✅ 恢复完成（' + res.mode + ' 模式，' + (res.fileCount || 0) + ' 个文件）');
         await loadData();
       } else {
-        backupResultState[1]('❌ ' + ((res && res.message) || '恢复失败'));
+        backupResultState[1]('❌ ' + (fmtErr((res && res.message) || '恢复失败')));
       }
     } catch (e) {
-      backupResultState[1]('❌ ' + (e.message || String(e)));
+      backupResultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
     backupBusyState[1](false);
   }
@@ -585,10 +585,10 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         await loadData();
         resultState[1]('✅ 完成：' + (r.events||0) + ' 事件，' + (r.todos||0) + ' 待办');
       } else {
-        resultState[1]((r && r.message) || '❌ 分析失败');
+        resultState[1](fmtErr((r && r.message) || '❌ 分析失败'));
       }
     } catch (e) {
-      resultState[1]('❌ ' + (e.message || String(e)));
+      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
     analyzingState[1](false);
   }
@@ -601,7 +601,7 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         resultState[1]('✅ 已删除');
       }
     } catch(e) {
-      resultState[1]('❌ ' + (e.message || String(e)));
+      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
     }
   }
 
