@@ -422,10 +422,12 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
         dbgUi("loadMem", "knowledge OK count=" + result.memories.length + " personaId=" + (personaId || 'none'));
         __memFail = 0;
       } else if (result && result.success) {
-        // 空壳响应：已有记忆保留旧缓存不清空；无旧数据自驱重试（最多5次）
-        if (memoryState[0] && memoryState[0].length) return;
-        __memFail += 1;
-        if (__memFail < 10) setTimeout(function() { loadKnowledgeMemories(); }, __backoffMs(__memFail));
+        // v1.8.6 真空响应：原生确认无记忆——清空幽灵缓存，避免显示不存在条目
+        if (memoryState[0] && memoryState[0].length) {
+          memoryState[1]([]);
+          try { ctx.setEnv('CACHED_KNOWLEDGE_MEMORIES', '[]'); } catch (__eC) {}
+        }
+        return;
       } else {
         resultState[1]('记忆读取失败：' + (fmtErr((result && result.message) || '未知错误')));
         __memFail += 1;
@@ -608,12 +610,32 @@ if (!__curP2 || __curP2.id !== String(p.id || '') || __curP2.name !== String(p.n
   async function deleteMemory(memoryId) {
     try {
       var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:delete_memory', { memory_id: String(memoryId) }); });
-      if (parseResult(raw) && parseResult(raw).success) {
+      var r = parseResult(raw);
+      if (r && r.success) {
         await loadKnowledgeMemories();
         resultState[1]('✅ 已删除');
+      } else if (r && r.message && /memory not found/i.test(r.message)) {
+        dropMemoryFromCache(memoryId);
+        resultState[1]('✅ 已删除');
+      } else {
+        resultState[1]('❌ ' + (fmtErr(r ? r.message : '未知错误')));
       }
     } catch(e) {
-      resultState[1]('❌ ' + (fmtErr(e.message || String(e))));
+      var __em = String((e && e.message) || e);
+      if (/memory not found/i.test(__em)) {
+        dropMemoryFromCache(memoryId);
+        resultState[1]('✅ 已删除');
+      } else {
+        resultState[1]('❌ ' + (fmtErr(__em)));
+      }
+    }
+  }
+  function dropMemoryFromCache(memoryTitle) {
+    var cur = memoryState[0] || [];
+    var next = cur.filter(function(m) { return String(m.title || '') !== String(memoryTitle); });
+    if (next.length !== cur.length) {
+      memoryState[1](next);
+      try { ctx.setEnv('CACHED_KNOWLEDGE_MEMORIES', JSON.stringify(next)); } catch (e) {}
     }
   }
 
