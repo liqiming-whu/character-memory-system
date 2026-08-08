@@ -552,18 +552,21 @@ Memory Core兼容：
 
 详见 `docs/MAINTAINER_HANDOFF.md` 第 7.5 节。优先级低于功能正确性，暂缓处理。
 
-## 12.2 自动分析完成但结果未在 UI 展示（v2.0.0 遗留）
+## 12.2 自动分析完成但结果未在 UI 展示（v2.0.0 遗留，**v2.3.3 已修复，2026-08-08 20:07 真机验证通过 ✅**）
 
-状态：`[未解决，暂缓，计划下个版本修复]`。v2.0.0 实机复现：打开插件侧边栏提示「自动分析」（`trigger_analysis` 检测到新消息并异步启动分析），分析完成后结果未返回 UI；退出重进提示「无新对话内容（上次分析：08/08/2026, 01:40:29 AM）」——水位线已推进，证明分析实际完成，只是结果未展示。
+状态：`[已修复，真机验证通过]`。
 
-已确认：水位线机制正常（重进后能识别"无新内容"，说明分析确实跑完并落盘）；问题不在分析链路本身。
-
-疑似方向：
-1. `trigger_analysis` 异步启动分析后，UI 缺少「分析完成 → 重新加载数据」的回调链路；结果落盘后界面仍停留在打开时的旧数据，需手动退出重进才能看到。
-2. 对比手动分析（`analyze_saved_messages`）可能有完成后刷新逻辑，侧边栏自动分析路径未复用同一刷新机制。
-3. 需确认结果落盘（六类数据/记忆）与 `load_saved_data`/`sync_to_env` 的联动时机，必要时在分析完成后主动触发一次数据重载。
-
-优先级：低（分析数据已正确写入，重进可正常查看；仅影响首次打开时的即时反馈）。下个版本修复。
+- **根因（同 CME v2.3.2，Operit 官方源码逆向）**：compose_dsl UI 树只在 ①初始渲染 ②action 分发 ③文本输入 ④平台侧 rerender 时重建；异步 setState（setTimeout/异步 IIFE 回调）只写 stateStore 不触发平台重绘（`notifyStateChanged` 无订阅者即丢弃）→ 自动分析的「分析中」文案、完成文案、数据刷新全部不显示。
+- **v2.3.2 修复**：
+  1. 根节点 `onLoad` 末尾保持 action 窗口 **120s**（`await new Promise(setTimeout 120000)`）——onLoad 本身是平台 action 分发，期间订阅 stateChange，任何 setState（含 setTimeout 链）触发中间渲染实时推送平台重绘
+  2. 自动分析 IIFE **延迟 8s 触发**——确保 `trigger_analysis` 返回与 90s 轮询刷新落在 onLoad 窗口内
+  - 实测：8s 后「分析中」文案正常显示（渲染修复生效 ✅），但 90s 后仍显示「分析超时」
+- **v2.3.3 修复（分析超时根因，2026-08-08 20:00-20:05）**：
+  - 现象：20:00:37 分析实际完成（trigger.json `lastAnalyzedAt`/`lastResult=has_data`，六类数据落盘），UI 却 90s 轮询超时
+  - 根因（官方源码 JsExecutionScriptBuilder.kt 实锤）：`setEnv`/`getEnv` 是裸全局，经 `__operitInvokeCallRuntime` 调用**活动 callRuntime**；`_runAutoAnalysis().then()` 异步回调执行时工具调用已 complete、活动 callRuntime 已失效 → `setEnv('MEMORY_SYSTEM_TRIGGER_RESULT')` 写入失败被 catch 吞掉 → UI 轮询永远读不到
+  - 修复（同 CME 已验证方案）：**文件通道**——`_runAutoAnalysis` 完成/失败时原子写 `trigger_result.json`，新增 `get_trigger_result` 工具；UI 轮询从 `ctx.getEnv` 改为 `callTool('memory_system:get_trigger_result')`
+- **验证**：**20:07 真机验证 PASS**——自动分析「正在分析」→「分析完成：发现 N 条新内容」全流程自动显示，不再超时。
+- 关联：12.3（水位线加固 v2.3.1）同批烧录，一并验证。
 
 ## 12.3 水位线字段丢失加固（v2.3.1，2026-08-08 已实施）
 

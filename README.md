@@ -1,6 +1,18 @@
 # Character Memory System
 
-## 当前版本：v2.1.0（Rendering Hotfix Release）
+## 当前版本：v2.3.3（Analysis Result File Channel Fix，已真机验证 ✅）
+v2.3.3 修复自动分析"显示分析中但随后超时"（v2.3.2 引入的显示链路最后一环）：
+1. **根因**：分析完成信号走 `setEnv('MEMORY_SYSTEM_TRIGGER_RESULT')`，但该写入发生在工具调用结束后的异步回调里，活动 callRuntime 已失效 → 写入失败被吞 → UI 轮询读不到 → 90s 显示"分析超时"（trigger.json 实锤分析实际已完成并落盘）。
+2. **修复（同 CME 方案）**：改为**文件通道**——`_runAutoAnalysis` 完成/失败时写 `trigger_result.json`（原子写），新增 `get_trigger_result` 工具供 UI 轮询读取；UI 轮询从读 env 改为调工具。
+3. 版本号 2.3.2 → 2.3.3。**20:07 真机验证 PASS：自动分析全流程（分析中→完成）自动显示，不再超时。**
+---
+## 上一版本：v2.3.2（Async Render Fix Release）
+本次修复自动分析结果「切 tab 才显示」的遗留问题（12.2，v2.0.0 起）：
+1. **onLoad action 窗口 120s**：根节点 onLoad 结束后保持 120s 订阅窗口，期间自动分析轮询等异步 setState 触发平台中间渲染实时推送——异步路径不再需要切 tab 才显示「分析中」/「分析完成」与数据刷新（同 CME v2.3.2 方案，源码级机制：UI 树只在初始渲染/action 分发/文本输入/平台侧 rerender 时重建）。
+2. **自动分析延迟 8s 触发**：确保 `trigger_analysis` 的 callTool 返回与轮询刷新落在 onLoad 窗口内（同 CME v2.3.2）。
+3. 版本号 2.1.0 → 2.3.2（与 CME 同版本战役对齐）。
+---
+## 上一版本：v2.1.0（Rendering Hotfix Release）
 本次热修复聚焦渲染链路稳定性，消除快速切换选项卡时的偶发 compose_dsl 崩溃：
 1. **移除角色页渲染闭包内残留探针**（`tabs/character.js` 的 `Tools.Files.write`）：每次角色页渲染同步写文件，快速切 tab 渲染风暴时文件 I/O 竞争 → 中间渲染失败 → Operit DSL 动作表竞态 → `compose_dsl runtime error: not a function`（operit.log 实锤 `__operit_dispatch_compose_dsl_action`）。
 2. 与 CME 同源优化对齐（CME `89076ea`）：渲染闭包内禁止任何文件 I/O 与工具调用；探针统一走限频路径或整体关闭。

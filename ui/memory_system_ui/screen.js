@@ -135,10 +135,13 @@ var memoryLoadScheduledRef = ctx.useRef('cms_memoryLoadScheduled', false);
 var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
   if (!__bootTrig && !initRef.current) {
  initRef.current = true; __bootTrig = true; dbgUi("boot", "trig once");
- // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
- (async function() {
-   try {
-     var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:trigger_analysis', {}); });
+  // ===== 自动触发分析：检测上次以来是否有新对话内容 =====
+  // v2.3.2：延迟 8s 触发——确保 callTool 返回与轮询刷新等异步 setState 落在根节点 onLoad 的
+  // 120s action 窗口内，否则异步 setState 只写 stateStore 不触发平台重绘（同 CME v2.3.2 根因，修复 12.2）
+  setTimeout(function() {
+  (async function() {
+    try {
+      var raw = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:trigger_analysis', {}); });
      var r = parseResult(raw);
      if (r && r.started) {
        // 异步分析已启动 → 显示"分析中"并轮询刷新数据
@@ -154,43 +157,49 @@ var characterLoadScheduledRef = ctx.useRef('cms_characterLoadScheduled', false);
            resultState[1]('⏱️ 分析超时，请稍后手动刷新');
            return;
          }
-         setTimeout(async function() {
-           try {
-             // 读 env 看分析是否结束
-             var envResult = '';
-             try { envResult = ctx.getEnv('MEMORY_SYSTEM_TRIGGER_RESULT') || ''; } catch(e) {}
-             if (envResult && envResult !== lastSnapshot) {
-               lastSnapshot = envResult;
-               try {
-                 var parsed = JSON.parse(envResult);
-                 if (parsed && parsed.finishedAt) {
-                   // 分析已结束
-                   if (parsed.success && parsed.hasData) {
-                     await loadData();
-                     resultState[1]('✅ 后台分析完成：发现 ' + (parsed.newMessageCount || 0) + ' 条新内容');
-                   } else if (parsed.success && !parsed.hasData) {
-                     resultState[1]('✅ 后台分析完成：未发现可提取内容');
-                   } else {
-                     resultState[1]('⚠️ 分析失败：' + (parsed.error || '未知错误'));
-                   }
-                   return;
-                 }
-               } catch(pe) {}
-             }
-             pollOnce();
-           } catch(e) {
-             pollOnce();
-           }
-         }, 3000);
+setTimeout(async function() {
+            try {
+              // v2.3.3：文件通道轮询（同 CME）——调 get_trigger_result 读 trigger_result.json；
+              // 不再读 env：工具调用结束后的异步回调里 setEnv 写入失败被吞（20:02 实测 90s 超时）
+              var envResult = '';
+              try {
+                var __raw2 = await __serialCtx(ctx, function() { return ctx.callTool('memory_system:get_trigger_result', {}); });
+                var __r2 = parseResult(__raw2);
+                if (__r2 && __r2.finishedAt) envResult = JSON.stringify(__r2);
+              } catch(e) {}
+              if (envResult && envResult !== lastSnapshot) {
+                lastSnapshot = envResult;
+                try {
+                  var parsed = JSON.parse(envResult);
+                  if (parsed && parsed.finishedAt) {
+                    // 分析已结束（get_trigger_result：error 非空=失败；hasData=是否有提取内容）
+                    if (parsed.error) {
+                      resultState[1]('⚠️ 分析失败：' + (parsed.error || '未知错误'));
+                    } else if (parsed.hasData) {
+                      await loadData();
+                      resultState[1]('✅ 后台分析完成：发现 ' + (parsed.newMessageCount || 0) + ' 条新内容');
+                    } else {
+                      resultState[1]('✅ 后台分析完成：未发现可提取内容');
+                    }
+                    return;
+                  }
+                } catch(pe) {}
+              }
+              pollOnce();
+            } catch(e) {
+              pollOnce();
+            }
+          }, 3000);
        })();
      } else if (r && r.skipped) {
        // 没有新内容：静默（也可选显示一句提示）
        resultState[1]('✅ 无新对话内容 (' + (r.lastAnalyzedAt ? '上次分析：' + new Date(r.lastAnalyzedAt).toLocaleString() : '首次检测') + ')');
      } else if (r && !r.success) {
        resultState[1]('⚠️ 检测失败：' + (fmtErr(r.message || r.error || '未知')));
-     }
-   } catch(e) {}
- })();
+      }
+    } catch(e) {}
+  })();
+  }, 8000);
 }
 
   // 首次状态为空时读取一次；后续由根节点 onLoad、分析完成或用户操作明确刷新。
@@ -1063,6 +1072,9 @@ Operit.NativeInterface.callTool('memory_system', 'save_ui_state', __uiParams);
     await loadScreenPersona();
     dbgUi("onLoad", "loadScreenPersona done");
     characterReadyState[1](true);
+    // v2.3.2：保持 action 链窗口 120s——期间自动分析轮询/数据刷新等异步 setState 触发
+    // 中间渲染实时推送平台重绘（同 CME v2.3.2 方案，源码级机制；窗口结束后由用户交互兜底）
+    await new Promise(function(__res) { setTimeout(__res, 120000); });
   } }, [
     headerCard,
     UI.Spacer({ height: 6 }),

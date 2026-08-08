@@ -145,6 +145,11 @@ METADATA
             "parameters": [
                 { "name": "chat_id", "type": "string", "required": false, "description": "对话ID，不传则使用最近对话" }
             ]
+        },
+        {
+            "name": "get_trigger_result",
+            "description": { "zh": "读取最近一次自动分析结果（trigger_result.json 文件通道），供 UI 轮询判断分析完成", "en": "Read the latest auto analysis result (trigger_result.json file channel) for UI polling" },
+            "parameters": []
         }
     ]
 }
@@ -169,6 +174,10 @@ var UI_STATE_FILE = DATA_DIR + '/last_ui_state.json';
 var UI_STATE_ENV = 'MEMORY_SYSTEM_UI_STATE_FILE';
 // Hook 与侧边栏共用按对话保存的分析水位线。
 var TRIGGER_STATE_FILE = DATA_DIR + '/trigger.json';
+// v2.3.3：分析完成结果文件通道（同 CME 方案）——UI 轮询改调 get_trigger_result 读本文件；
+// 不再依赖 setEnv('MEMORY_SYSTEM_TRIGGER_RESULT')：工具调用结束后的异步回调里活动 callRuntime
+// 已失效，setEnv 写入失败被吞 → UI 永远读不到（20:02 实测 90s 轮询超时）。
+var TRIGGER_RESULT_FILE = DATA_DIR + '/trigger_result.json';
 var ENV_KEY_EVENTS = 'MW_DATA_EVENTS';
 var ENV_KEY_CONTACTS = 'MW_DATA_CONTACTS';
 var ENV_KEY_INFO = 'MW_DATA_INFO';
@@ -1337,12 +1346,56 @@ async function _runAutoAnalysis(chatId, messages, lastProcessedTs) {
         stateAfter.callerCardId = callerCardId;
         stateAfter.personaName = personaName;
         await writeJson(TRIGGER_STATE_FILE, stateAfter);
+        // v2.3.3：文件通道——分析完成结果写 trigger_result.json（UI 经 get_trigger_result 轮询读取）
+        try {
+            await writeJson(TRIGGER_RESULT_FILE, {
+                finishedAt: stateAfter.lastAnalyzedAt,
+                chatId: chatId || 'current',
+                newMessageCount: messages.length,
+                success: true,
+                hasData: hasStructured,
+                error: null
+            });
+        } catch (e) {}
 
         return { success: true, newMessageCount: messages.length, hasData: hasStructured };
     } catch (e) {
+        // v2.3.3：失败也写文件通道，UI 可显示失败原因而非无限等待
+        try {
+            await writeJson(TRIGGER_RESULT_FILE, {
+                finishedAt: new Date().toISOString(),
+                chatId: chatId || 'current',
+                newMessageCount: messages ? messages.length : 0,
+                success: false,
+                hasData: false,
+                error: e.message || String(e)
+            });
+        } catch (e2) {}
         return { success: false, error: e.message || String(e) };
     }
 }
+
+// ===== get_trigger_result：读取最近一次自动分析结果（文件通道，供 UI 轮询） =====
+exports.get_trigger_result = async function () {
+    try {
+        var result = await readJson(TRIGGER_RESULT_FILE, null);
+        if (!result || !result.finishedAt) {
+            complete({ success: false, found: false, message: '暂无分析结果' });
+            return;
+        }
+        complete({
+            success: true,
+            found: true,
+            finishedAt: result.finishedAt,
+            chatId: result.chatId || '',
+            newMessageCount: result.newMessageCount || 0,
+            hasData: !!result.hasData,
+            error: result.error || null
+        });
+    } catch (e) {
+        complete({ success: false, found: false, message: e.message || String(e) });
+    }
+};
 
 exports.trigger_analysis = async function (params) {
     try {
@@ -1410,30 +1463,9 @@ if (newMessages.length === 0) {
         }
 
         // 有新内容：异步启动分析，立即返回，不阻塞 UI
-        (function () {
-            _runAutoAnalysis(chatId, newMessages, lastProcessedTs).then(function (r) {
-                try {
-                    setEnv('MEMORY_SYSTEM_TRIGGER_RESULT', JSON.stringify({
-                        finishedAt: new Date().toISOString(),
-                        chatId: chatId,
-                        newMessageCount: newMessages.length,
-                        success: !!(r && r.success),
-                        hasData: !!(r && r.hasData),
-                        error: r && r.error ? r.error : null
-                    }));
-                } catch (e) {}
-            }).catch(function (e) {
-                try {
-                    setEnv('MEMORY_SYSTEM_TRIGGER_RESULT', JSON.stringify({
-                        finishedAt: new Date().toISOString(),
-                        chatId: chatId,
-                        newMessageCount: newMessages.length,
-                        success: false,
-                        error: e && (e.message || String(e))
-                    }));
-                } catch (e2) {}
-            });
-        })();
+        // v2.3.3：结果经 _runAutoAnalysis 内部写 trigger_result.json（文件通道），
+        // 不再在异步回调里 setEnv（活动 callRuntime 已失效，写入被吞）。
+        _runAutoAnalysis(chatId, newMessages, lastProcessedTs).catch(function () {});
 
         complete({
             success: true,
