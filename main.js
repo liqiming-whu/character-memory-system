@@ -128,16 +128,25 @@ async function upsertLifeMemory(entry) {
   await Tools.Memory.create({ title: title, content: entry.content, source: 'character_memory_life_auto', folderPath: GLOBAL_MEMORY_FOLDER, tags: 'life,' + entry.category + ',auto,schema_v1,reconciled' });
 }
 
+function sleepMs(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 async function readJson(path, fallback) {
-  try {
-    var res = await Tools.Files.read(path);
-    if (res && res.content) return JSON.parse(res.content);
-  } catch (e) {}
+  // v2.3.1：parse 失败重试 3 次（150ms 间隔），防并发写导致读到半写损坏 JSON
+  for (var ri = 0; ri < 3; ri++) {
+    try {
+      var res = await Tools.Files.read(path);
+      if (res && res.content) return JSON.parse(res.content);
+    } catch (e) {}
+    if (ri < 2) await sleepMs(150);
+  }
   return fallback;
 }
 
 async function writeJson(path, data) {
-  await Tools.Files.write(path, JSON.stringify(data, null, 2), false, 'android');
+  // v2.3.1：原子写（tmp + move），杜绝并发读-写半写损坏；move 失败回退直接写
+  var tmpPath = path + '.tmp';
+  var content = JSON.stringify(data, null, 2);
+  await Tools.Files.write(tmpPath, content, false, 'android');
+  try { await Tools.Files.move(tmpPath, path); } catch (e) { await Tools.Files.write(path, content, false, 'android'); }
 }
 
 // ===== AI 调用基础设施 =====
@@ -659,8 +668,12 @@ async function onPromptFinalize(input) {
     var trigger = await readJson(TRIGGER_FILE, null);
 
     if (!trigger) {
-      // 首次初始化
-      await writeJson(TRIGGER_FILE, { chatId: currentChatId, cooldownStart: now, callerCardId: currentPersona ? currentPersona.id : '', personaName: currentPersona ? currentPersona.name : '' });
+      // 首次初始化（v2.3.1：合并保留已有水位线等字段，防 readJson 异常/损坏时误清）
+      var nextTrigger0 = Object.assign({}, trigger || {}, {
+        chatId: currentChatId, cooldownStart: now,
+        callerCardId: currentPersona ? currentPersona.id : '', personaName: currentPersona ? currentPersona.name : ''
+      });
+      await writeJson(TRIGGER_FILE, nextTrigger0);
     } else {
       var cooldownPassed = (now - (trigger.cooldownStart || now)) >= COOLDOWN_MS;
       var processChatId = trigger.chatId || currentChatId;
@@ -674,13 +687,15 @@ async function onPromptFinalize(input) {
 
       // 每条消息都刷新冷却计时器 = 记录"最后活跃时间"
       // 保留所有对话的分析水位线。
-      await writeJson(TRIGGER_FILE, {
+      // v2.3.1：写前合并保留水位线等全部字段（旧逻辑整写会清空 lastAnalyzedAt/lastCheckedAt 等）
+      var nextTrigger = Object.assign({}, trigger || {}, {
         chatId: currentChatId,
         cooldownStart: now,
-        watermarks: trigger.watermarks || {},
+        watermarks: (trigger && trigger.watermarks) || {},
         callerCardId: currentPersona ? currentPersona.id : '',
         personaName: currentPersona ? currentPersona.name : ''
       });
+      await writeJson(TRIGGER_FILE, nextTrigger);
     }
 
     // === 记忆注入：persist 关闭时在最终发送阶段返回附件字符串（仅进入本次模型请求，不写回聊天记录）===

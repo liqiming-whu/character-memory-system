@@ -565,6 +565,16 @@ Memory Core兼容：
 
 优先级：低（分析数据已正确写入，重进可正常查看；仅影响首次打开时的即时反馈）。下个版本修复。
 
+## 12.3 水位线字段丢失加固（v2.3.1，2026-08-08 已实施）
+
+- 问题：`main.js onPromptFinalize` 每次消息整写 trigger.json 两处——行 663（首次初始化）裸写 4 字段；行 677（每条消息刷新）虽保留 `watermarks`，但**清空 `lastAnalyzedAt`/`lastAnalyzedChatId`/`lastAnalyzedNewCount`/`lastResult`/`lastCheckedAt`/`lastCheckedChatId` 六字段** → "上次分析"显示失效、检测标记丢失；readJson 异常/损坏时首次初始化还可能误清已有水位线
+- 修复（同 CME v2.3.1 方案，2026-08-08 17:10）：
+  1. **合并保留**：onPromptFinalize 两处整写改为写前 `Object.assign({}, trigger || {}, {...})`，保留全部水位线字段
+  2. **读取重试**：`readJson` parse 失败重试 3 次（150ms 间隔）——防并发写导致读到半写损坏 JSON
+  3. **原子写**：`writeJson` 改为 tmp + move（同目录 rename 原子替换），move 失败回退直接写——杜绝并发读-写半写损坏
+- 状态：**已烧录（debug_install_toolpkg），待真机验证**
+- 关联：12.2（分析完成 UI 不刷新）为前端反馈链路问题（同 CME 根因②③：bridge 响应错配 / 无反馈通道）；CMS 无后端，后续按 CME 的 serialCall 串行队列 + 文件通道方案处理
+
 # 13. 记忆过多时的展示与管理方案（下版本计划，2026-08-08 入档）
 
 > 双端方案（CMS/CME 同步入档）。解决记忆/信息数量增长后的展示与管理：不丢数据、不卡 UI、可全量搜索、可批量管理。
