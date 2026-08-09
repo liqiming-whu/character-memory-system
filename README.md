@@ -1,6 +1,14 @@
 # Character Memory System
 
-## 当前版本：v2.3.3（Analysis Result File Channel Fix，已真机验证 ✅）
+根据记忆系统插件开发，不能和记忆系统插件同时启用。使用Material Design重构UI。支持自动或手动分析会话历史提取为长期记忆并保存。实现按角色卡隔离记忆功能。基于角色卡ID、Persona目录和Operit原生Memory Profile提供角色长期记忆、隔离召回、Prompt注入与角色管理界面。记忆注入采用官方额外信息注入插件方案，可在设置页开关并选择是否随消息保存。
+
+## 当前版本：v2.3.4（展示上限统一 + 首次渲染竞态缓解，2026-08-09）
+v2.3.4 变更：
+1. **展示上限统一（用户决策落地）**：手机端插件受平台性能限制，不负责大规模展示——所有条目最多显示时间最近的 **100 条**、按从新到旧排序（`limitLatest100`，CMS/CME 双端一致）；数据本身不删除（仅展示截断），注入/分析链路不受影响。
+2. **首次渲染竞态缓解**：时间线页/角色页首次进入偶发 `Script error: not a function`（平台首次渲染 bundle 竞态，切换 tab 即恢复）——对 `screen.js`/`character.js` 的 `theme.c` 调用加类型防御（theme 模块异常时降级内置兜底色），本地复现 4 分支全绿。
+3. 版本号 2.3.3 → 2.3.4。
+---
+## 上一版本：v2.3.3（Analysis Result File Channel Fix，已真机验证 ✅）
 v2.3.3 修复自动分析"显示分析中但随后超时"（v2.3.2 引入的显示链路最后一环）：
 1. **根因**：分析完成信号走 `setEnv('MEMORY_SYSTEM_TRIGGER_RESULT')`，但该写入发生在工具调用结束后的异步回调里，活动 callRuntime 已失效 → 写入失败被吞 → UI 轮询读不到 → 90s 显示"分析超时"（trigger.json 实锤分析实际已完成并落盘）。
 2. **修复（同 CME 方案）**：改为**文件通道**——`_runAutoAnalysis` 完成/失败时写 `trigger_result.json`（原子写），新增 `get_trigger_result` 工具供 UI 轮询读取；UI 轮询从读 env 改为调工具。
@@ -70,9 +78,9 @@ v2.3.3 修复自动分析"显示分析中但随后超时"（v2.3.2 引入的显�
 
 Character Memory System 是基于 Operit ToolPkg 和原生 Memory API 的角色长期记忆扩展。项目在保留个人 AI 助手能力的基础上，为当前角色卡增加隔离的长期记忆、召回和 Prompt 注入。
 
-当前版本：`2.1.0`（渲染稳定性热修版，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
+当前版本：`2.3.4`（展示上限统一 + 首次渲染竞态缓解，见上文）。记忆注入已重构为官方附件方案：设置页/输入菜单提供「记忆注入」总开关、「注入内容随消息保存」开关与「每次注入记忆条数」（输入 1-20 防抖保存，默认 5），持久化开关决定注入发生在 `PromptInput`（随消息保存）还是 `PromptFinalize`（仅发送给模型）。注入改用宿主 `query_memory` 工具，范围仅覆盖 Operit 默认记忆库（不再注入 memory_system 的 persona/global 目录与本地六类数据）。UI 已全面改用 `MaterialTheme.colorScheme` token 与官方 Compose 组件。六类生活数据已拆分为独立小文件存储（`life_store.js`，内存缓存 + 防抖写入 + 原子写），并新增数据备份导入导出（`export_backup`/`inspect_backup`/`restore_backup`）。
 
-当前测试包：`com-operit-character-memory-system-v2.1.0.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
+当前测试包：`com-operit-character-memory-system-v2.3.4.toolpkg`（部署于 /sdcard/Download/Operit/packages/ 与 /sdcard/Download/）。
 
 > ⚠️ **v1.5.7 是支持「同时注入 memory_system + Operit 默认记忆库」的最后一个版本**。从 v1.5.8 起，注入范围仅覆盖 Operit 默认记忆库。
 
