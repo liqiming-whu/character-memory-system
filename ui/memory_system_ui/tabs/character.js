@@ -14,7 +14,10 @@ const CATEGORIES = [
 
 function render(ctx, personaFromScreen, memoriesFromScreen, readyFromScreen, refreshFromScreen) {
   var UI = ctx.UI;
-  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
+  // v2.3.4：防御——theme 模块加载异常时降级为内置兜底色，避免渲染期 not a function
+  var colors = (theme && typeof theme.c === 'function')
+    ? theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme)
+    : { primary: '#6750A4', onPrimary: '#FFFFFF', onSurfaceVariant: '#49454F', error: '#B3261E', errorContainer: '#F9DEDC', surfaceContainerHigh: '#ECE6F0', primaryContainer: '#EADDFF', tertiary: '#7D5260', onErrorContainer: '#410E0B', secondary: '#625B71', onSecondary: '#FFFFFF', onTertiary: '#FFFFFF', surface: '#FEF7FF', onSurface: '#1D1B20' };
   // 分类 chip 用 primary/tertiary 交替强调
   var __charAutoLoadOnce = false;
 var __charPropsLock = false;

@@ -50,7 +50,10 @@ function dbgUi(stage, msg) {
 function Screen(ctx) {
   __mountSeq += 1; dbgUi("mount", "Screen enter #" + __mountSeq);
   var UI = ctx.UI;
-  var colors = theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme);
+  // v2.3.4：防御——theme 模块加载异常时降级为内置兜底色，避免渲染期 not a function
+  var colors = (theme && typeof theme.c === 'function')
+    ? theme.c(ctx.MaterialTheme && ctx.MaterialTheme.colorScheme)
+    : { primary: '#6750A4', onPrimary: '#FFFFFF', onSurfaceVariant: '#49454F', error: '#B3261E', errorContainer: '#F9DEDC', surfaceContainerHigh: '#ECE6F0', primaryContainer: '#EADDFF', tertiary: '#7D5260', onErrorContainer: '#410E0B', secondary: '#625B71', onSecondary: '#FFFFFF', onTertiary: '#FFFFFF', surface: '#FEF7FF', onSurface: '#1D1B20' };
 
   // ===== 状态 =====
   var cachedData = { events: [], contacts: [], info: [], finance: [], todos: [], menstrual: [] };
@@ -280,13 +283,13 @@ try {
 // 注意：listChat 不支持 offset，所以一次性拉大数（200），
 // 真实对话数通过 totalCount 显示给用户，不再分页。
 var raw = await __serialCtx(ctx, function() { return ctx.callTool('chat_exporter:list_chats_brief', {
-limit: 200,
+limit: 100,
 sort_order: 'desc'
 }); });
 var r = parseResult(raw);
 if (r && r.success && r.data && r.data.chats) {
 chatsState[1](r.data.chats);
-hasMoreState[1](r.data.chats.length >= 200);
+hasMoreState[1](r.data.chats.length >= 100);
 offsetState[1](r.data.chats.length);
 // 记录后端真实总数（用于顶部"实际拉取数量"显示）
 if (r.data.totalCount !== undefined) totalChatsState[1](r.data.totalCount);
