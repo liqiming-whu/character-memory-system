@@ -550,6 +550,8 @@ Memory Core兼容：
 
 疑似方向：Compose DSL `useRef` 在实例复用时持久保留 current 导致 `ScheduledRef` 残留；多个 setTimeout 快速切换时回调被宿主丢弃；角色页串行 await 链路在切换中断时 state 更新错乱。
 
+**2026-08-09 补充观察（v2.3.4 验证期）**：时间线页（tab2）/角色页**首次进入偶发** `Script error: not a function`（`_operit_render_compose_dsl`，module=theme.js from=character.js），**切换 tab 即恢复，后续多次测试不复现**——与本节同源（平台首次渲染 bundle 竞态）。已做缓解：v2.3.4 对 `screen.js`/`character.js` 的 `theme.c` 调用加类型防御（theme 模块异常时降级内置兜底色），静态/本地复现 4 分支全绿；若再复现需平台侧日志定位（插件 dbgUi 探针已关闭，无留痕）。
+
 详见 `docs/MAINTAINER_HANDOFF.md` 第 7.5 节。优先级低于功能正确性，暂缓处理。
 
 ## 12.2 自动分析完成但结果未在 UI 展示（v2.0.0 遗留，**v2.3.3 已修复，2026-08-08 20:07 真机验证通过 ✅**）
