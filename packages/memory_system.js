@@ -351,6 +351,27 @@ exports.save_ui_state = async function (params) {
     }
 };
 
+// ===== v2.3.4：展示上限统一——手机端插件不负责大规模展示，所有条目最多最近 100 条、新→旧 =====
+function _itemTs(v) {
+    if (v == null || v === '') return 0;
+    var s = String(v);
+    var n = Number(s);
+    if (s.trim() !== '' && isFinite(n)) return n > 1e12 ? n : n * 1000; // 秒→毫秒
+    var t = Date.parse(s);
+    return isNaN(t) ? 0 : t;
+}
+function limitLatest100(arr) {
+    if (!arr || !arr.length) return arr;
+    var copy = arr.slice();
+    copy.sort(function(a, b) {
+        var at = _itemTs((a && (a.timestamp || a.updatedAt || a.createdAt || a.startDate)) || '');
+        var bt = _itemTs((b && (b.timestamp || b.updatedAt || b.createdAt || b.startDate)) || '');
+        if (at !== bt) return bt - at; // 新 → 旧
+        return 0;
+    });
+    return copy.slice(0, 100);
+}
+
 // ===== load_saved_data：返回本地结构化数据；长期记忆由 load_memories 查询原生 Memory =====
 exports.load_saved_data = async function () {
     try {
@@ -358,6 +379,10 @@ exports.load_saved_data = async function () {
         var ext = await loadAll();
         if (!ext.todos) ext.todos = [];
         if (!ext.finance) ext.finance = [];
+        // v2.3.4：每类最多最近 100 条、新→旧（手机端不做大规模展示）
+        ['events', 'todos', 'contacts', 'info', 'finance', 'menstrual'].forEach(function(cat) {
+            if (Array.isArray(ext[cat])) ext[cat] = limitLatest100(ext[cat]);
+        });
         // 历史对账改为后台异步执行：首次对账可能遍历大量条目较慢，
         // 不能阻塞 UI 首次数据加载；reconcileNativeMemory 内部用文件标记防重复。
         (function () {
@@ -1164,12 +1189,17 @@ exports.load_memories = async function (params) {
         }
 
         var memories = Object.keys(merged).map(function(key) { return merged[key]; });
-        memories.sort(function(a, b) {
-            var ak = a.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
-            var bk = b.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
-            if (ak !== bk) return bk - ak;
-            return b.score - a.score;
-        });
+        // v2.3.4：全量浏览（query='*'）按时间新→旧；关键词/向量检索保持相关度排序
+        if (fullQuery) {
+            memories.sort(function(a, b) { return _itemTs(b.timestamp) - _itemTs(a.timestamp); });
+        } else {
+            memories.sort(function(a, b) {
+                var ak = a.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
+                var bk = b.matched_by.indexOf('keyword') >= 0 ? 1 : 0;
+                if (ak !== bk) return bk - ak;
+                return b.score - a.score;
+            });
+        }
         memories = memories.slice(0, limit);
         complete({ success: true, memories: memories, total: memories.length, scope: scope, query: fullQuery ? '*' : rawQuery });
     } catch (e) {
